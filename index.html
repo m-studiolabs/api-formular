@@ -459,6 +459,21 @@
   .kod-option-code { font-weight: 700; color: var(--steel); min-width: 60px; }
   .kod-option-label { font-size: 11px; color: var(--text-muted); font-family: var(--font-ui); }
 
+  /* Oddeľovač kategórie v zozname kódov */
+  .kod-separator {
+    padding: 5px 12px;
+    background: #eef2f8;
+    color: #6b7a8d;
+    font-family: var(--font-ui);
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.8px;
+    border-top: 1px solid #dde4ee;
+    border-bottom: 1px solid #dde4ee;
+    cursor: default;
+    user-select: none;
+  }
+
   /* Atyp badge */
   .atyp-badge {
     display: inline-block;
@@ -606,7 +621,7 @@
             <option value="A">A</option>
             <option value="B">B</option>
             <option value="C">C</option>
-            <option value="D">D</option>
+            <option value="E600120(ho)S1500single">E600120(ho)S1500single</option>
           </select>
         </div>
         <div class="form-group">
@@ -766,6 +781,19 @@ const TVAROVKY = {
     autoFill: { D: () => 90 },
     priruba: true,
   },
+  KOLHPR: {
+    label: 'KOLHPR – Koleno hranaté prechodové (voliteľný uhol)',
+    params: {
+      A: { req: true,  type: 'dim',   label: 'Šírka 1 (mm)' },
+      B: { req: true,  type: 'dim',   label: 'Výška (mm)' },
+      C: { req: true,  type: 'dim',   label: 'Šírka 2 (mm)' },
+      D: { req: true,  type: 'angle', label: 'Uhol (°)' },
+      E: { req: false, type: 'dim',   label: 'Zásek E (mm)' },
+      F: { req: false, type: 'dim',   label: 'Zásek F (mm)' },
+      G: { req: true,  type: 'dim',   label: 'Radius (mm)' },
+    },
+    priruba: true,
+  },
   // ─── OBLÚKY ──────────────────────────────────────
   OBLK45: {
     label: 'OBLK45 – Oblúk kruhový 45°',
@@ -788,6 +816,19 @@ const TVAROVKY = {
     autoFill: {
       B: (r) => r.A,
       C: () => 90,
+      D: (r) => +r.A > 630 ? 80 : 50,
+      E: (r) => +r.A > 630 ? 80 : 50,
+    },
+    priruba: true,
+  },
+  OBLK1: {
+    label: 'OBLK1 – Oblúk kruhový (voliteľný uhol)',
+    params: {
+      A: { req: true,  type: 'dim',   label: 'Priemer (mm)' },
+      C: { req: true,  type: 'angle', label: 'Uhol (°)' },
+    },
+    autoFill: {
+      B: (r) => r.A,
       D: (r) => +r.A > 630 ? 80 : 50,
       E: (r) => +r.A > 630 ? 80 : 50,
     },
@@ -818,6 +859,19 @@ const TVAROVKY = {
     autoFill: { D: () => 90 },
     priruba: true,
   },
+  OBLHPR: {
+    label: 'OBLHPR – Oblúk hranatý prechodový (voliteľný uhol)',
+    params: {
+      A: { req: true,  type: 'dim',   label: 'Šírka 1 (mm)' },
+      B: { req: true,  type: 'dim',   label: 'Výška (mm)' },
+      C: { req: true,  type: 'dim',   label: 'Šírka 2 (mm)' },
+      D: { req: true,  type: 'angle', label: 'Uhol (°)' },
+      E: { req: false, type: 'dim',   label: 'Zásek E (mm)' },
+      F: { req: false, type: 'dim',   label: 'Zásek F (mm)' },
+      G: { req: true,  type: 'dim',   label: 'Radius (mm)' },
+    },
+    priruba: true,
+  },
   // ─── NÁSTAVCE ────────────────────────────────────
   NASH: {
     label: 'NASH – Nástavec hranatý',
@@ -841,9 +895,7 @@ const TVAROVKY = {
     label: 'NASTK – Nástavec kruhový',
     params: {
       A: { req: true, type: 'dim', label: 'Priemer (mm)' },
-    },
-    autoFill: {
-      B: () => 100,
+      B: { req: true, type: 'len', label: 'Dĺžka (mm)' },
     },
     priruba: true,
   },
@@ -962,6 +1014,19 @@ const TVAROVKY = {
     },
     autoFill: {
       D: (r) => +r.A > 630 ? 80 : 50,
+      E: (r) => +r.B > 630 ? 80 : 50,
+    },
+    priruba: true,
+  },
+  PRK2: {
+    label: 'PRK2 – Prechod kruhový',
+    params: {
+      A: { req: true,  type: 'dim',    label: 'Priemer 1 (mm)' },
+      B: { req: true,  type: 'dim',    label: 'Priemer 2 (mm)' },
+      C: { req: true,  type: 'len',    label: 'Dĺžka (mm)' },
+      D: { req: true,  type: 'signed', label: 'Excentricita (mm)' },
+    },
+    autoFill: {
       E: (r) => +r.B > 630 ? 80 : 50,
     },
     priruba: true,
@@ -1095,18 +1160,229 @@ const TVAROVKY = {
     label: 'ZSLK – Záslepka kruhová',
     params: {
       A: { req: true, type: 'dim', label: 'Priemer (mm)' },
+      B: { req: true, type: 'len', label: 'Dĺžka (mm)' },
     },
-    autoFill: {
-      B: () => 100,
+    priruba: true,
+  },
+  // ─── VOĽNÁ POLOŽKA ───────────────────────────────
+  VOLNA: {
+    label: 'VOLNA – Voľná položka',
+    params: {
+      A: { req: false, type: 'len',  label: 'Hodnota A' },
+      B: { req: false, type: 'len',  label: 'Hodnota B' },
+      C: { req: false, type: 'len',  label: 'Hodnota C' },
+      D: { req: false, type: 'len',  label: 'Hodnota D' },
+      E: { req: false, type: 'len',  label: 'Hodnota E' },
+      F: { req: false, type: 'len',  label: 'Hodnota F' },
+      G: { req: false, type: 'len',  label: 'Hodnota G' },
+      H: { req: false, type: 'len',  label: 'Hodnota H' },
+      I: { req: false, type: 'len',  label: 'Hodnota I' },
+      J: { req: false, type: 'len',  label: 'Hodnota J' },
+      K: { req: false, type: 'len',  label: 'Hodnota K' },
+      L: { req: false, type: 'len',  label: 'Hodnota L' },
+      M: { req: false, type: 'len',  label: 'Hodnota M' },
+      N: { req: false, type: 'len',  label: 'Hodnota N' },
+      O: { req: false, type: 'len',  label: 'Hodnota O' },
+    },
+    priruba: true,
+  },
+
+  // ═══════════════════════════════════════════════════
+  //  TECHNOLÓGIA – v zozname kódov vždy na konci
+  // ═══════════════════════════════════════════════════
+  'RK KS': {
+    label: 'RK KS – Regulačná klapka kruhová servo príprava',
+    params: {
+      A: { req: true, type: 'dim', label: 'Priemer (mm)' },
+    },
+    priruba: true,
+  },
+  'RK KR': {
+    label: 'RK KR – Regulačná klapka kruhová ručná',
+    params: {
+      A: { req: true, type: 'dim', label: 'Priemer (mm)' },
+    },
+    priruba: true,
+  },
+  'RK HS': {
+    label: 'RK HS – Regulačná klapka hranatá servo príprava',
+    params: {
+      A: { req: true, type: 'dim', label: 'Šírka (mm)' },
+      B: { req: true, type: 'dim', label: 'Výška (mm)' },
+    },
+    priruba: true,
+  },
+  'RK HR': {
+    label: 'RK HR – Regulačná klapka hranatá ručná',
+    params: {
+      A: { req: true, type: 'dim', label: 'Šírka (mm)' },
+      B: { req: true, type: 'dim', label: 'Výška (mm)' },
+    },
+    priruba: true,
+  },
+  'PZ AL Sito': {
+    label: 'PZ AL Sito – Protidažďová žalúzia hliníková',
+    params: {
+      A: { req: true, type: 'dim', label: 'Šírka (mm)' },
+      B: { req: true, type: 'dim', label: 'Výška (mm)' },
+    },
+    priruba: true,
+  },
+  'PZ ZN Sito': {
+    label: 'PZ ZN Sito – Protidažďová žalúzia pozink',
+    params: {
+      A: { req: true, type: 'dim', label: 'Šírka (mm)' },
+      B: { req: true, type: 'dim', label: 'Výška (mm)' },
+    },
+    priruba: true,
+  },
+  'KS K': {
+    label: 'KS K – Kruhová strieška kruhová',
+    params: {
+      A: { req: true, type: 'dim', label: 'Priemer (mm)' },
+    },
+    priruba: true,
+  },
+  'KM K': {
+    label: 'KM K – Krycia mriežka kruhová',
+    params: {
+      A: { req: true, type: 'dim', label: 'Priemer (mm)' },
+    },
+    priruba: true,
+  },
+  'KM KN': {
+    label: 'KM KN – Krycia mriežka kruhová nástavec',
+    params: {
+      A: { req: true, type: 'dim', label: 'Priemer (mm)' },
+    },
+    priruba: true,
+  },
+  'CAGI N': {
+    label: 'CAGI N – Cagi hlavica N',
+    params: {
+      A: { req: true, type: 'dim', label: 'Priemer (mm)' },
+    },
+    priruba: true,
+  },
+  'CAGI P': {
+    label: 'CAGI P – Cagi hlavica P',
+    params: {
+      A: { req: true, type: 'dim', label: 'Priemer (mm)' },
+    },
+    priruba: true,
+  },
+  'VHK N': {
+    label: 'VHK N – Výfuková hlavica kruhová N',
+    params: {
+      A: { req: true, type: 'dim', label: 'Priemer (mm)' },
+    },
+    priruba: true,
+  },
+  'VHK P': {
+    label: 'VHK P – Výfuková hlavica kruhová P',
+    params: {
+      A: { req: true, type: 'dim', label: 'Priemer (mm)' },
+    },
+    priruba: true,
+  },
+  'VHH': {
+    label: 'VHH – Výfuková hlavica hranatá',
+    params: {
+      A: { req: true, type: 'dim', label: 'Šírka (mm)' },
+      B: { req: true, type: 'dim', label: 'Výška (mm)' },
+    },
+    priruba: true,
+  },
+  'TV H': {
+    label: 'TV H – Tlmiaca vložka hranatá',
+    params: {
+      A: { req: true, type: 'dim', label: 'Šírka (mm)' },
+      B: { req: true, type: 'dim', label: 'Výška (mm)' },
+    },
+    autoFill: { C: () => 100 },
+    priruba: true,
+  },
+  'TV K': {
+    label: 'TV K – Tlmiaca vložka kruhová',
+    params: {
+      A: { req: true, type: 'dim', label: 'Priemer (mm)' },
+    },
+    autoFill: { B: () => 100 },
+    priruba: true,
+  },
+  'TCV H': {
+    label: 'TCV H – Tlmičová vložka',
+    // Vlastná rozmerová rada – neplatí tu plošné minimum 80 mm (šírka od 50)
+    params: {
+      A: { req: true, type: 'len', label: 'Šírka (mm)' },
+      B: { req: true, type: 'len', label: 'Výška (mm)' },
+      C: { req: true, type: 'len', label: 'Dĺžka (mm)' },
+    },
+    priruba: true,
+  },
+  'TH K': {
+    label: 'TH K – Tlmič hluku kruhový',
+    params: {
+      A: { req: true, type: 'dim', label: 'Priemer (mm)' },
+      B: { req: true, type: 'len', label: 'Dĺžka (mm)' },
+    },
+    priruba: true,
+  },
+  'ANEM-H P-O': {
+    label: 'ANEM-H P-O – Anemostatová krabica s horizontálnym pripojením',
+    params: {
+      A: { req: true, type: 'dim', label: 'Šírka kazety (mm)' },
+      B: { req: true, type: 'dim', label: 'Výška kazety (mm)' },
+      C: { req: true, type: 'dim', label: 'Priemer pripojenia (mm)' },
+      D: { req: true, type: 'len', label: 'Výška krabice (mm)' },
+    },
+    priruba: true,
+  },
+  'ANEM-V P-O': {
+    label: 'ANEM-V P-O – Anemostatová krabica s vertikálnym pripojením',
+    params: {
+      A: { req: true, type: 'dim', label: 'Šírka kazety (mm)' },
+      B: { req: true, type: 'dim', label: 'Výška kazety (mm)' },
+      C: { req: true, type: 'dim', label: 'Priemer pripojenia (mm)' },
+      D: { req: true, type: 'len', label: 'Výška krabice (mm)' },
+    },
+    priruba: true,
+  },
+  'KM H-NA SB': {
+    label: 'KM H-NA SB – Krycia mriežka hranatá',
+    params: {
+      A: { req: true, type: 'dim', label: 'Šírka (mm)' },
+      B: { req: true, type: 'dim', label: 'Výška (mm)' },
+    },
+    priruba: true,
+  },
+  'KM H-RAMIK': {
+    label: 'KM H-RAMIK – Krycia mriežka hranatá rámik',
+    params: {
+      A: { req: true, type: 'dim', label: 'Šírka (mm)' },
+      B: { req: true, type: 'dim', label: 'Výška (mm)' },
     },
     priruba: true,
   },
 };
 
-// Štandardné rozmery
-const STD_DIMS_ROUND = [80,100,125,140,160,180,200,224,250,280,315,355,400,450,500,560,630,710,800,900,1000,1120,1250];
-
 const PRIRUBA_OPTIONS = ['', '20', '30', 'BP', 'VP', 'Lem'];
+
+// Predvolené príruby pre konkrétne tvarovky – nastavia sa rovno pri výbere kódu,
+// používateľ ich môže cez dropdown kedykoľvek zmeniť alebo vymazať.
+const PRIRUBA_DEFAULTS = {
+  RUHD: { C1: 'VP' },
+};
+
+// Vráti predvolené hodnoty prírub pre daný kód (prázdne ak nie sú definované)
+function prirubaDefaultsFor(kod) {
+  const d = PRIRUBA_DEFAULTS[kod] || {};
+  return {
+    priruba_C1: d.C1 || '',
+    priruba_C2: d.C2 || '',
+    priruba_C3: d.C3 || '',
+  };
+}
 
 // Stĺpce A..O
 const PARAM_COLS = ['A','B','C','D','E','F','G','H','I','J','K','L','M','N','O'];
@@ -1119,6 +1395,16 @@ const PARAM_COLS = ['A','B','C','D','E','F','G','H','I','J','K','L','M','N','O']
 //    { status: 'CHYBA', text: 'CHYBA – popis' }
 //    null  →  ak nie sú vyplnené povinné polia (nič nezobrazuj)
 // ══════════════════════════════════════════════════════
+// Výška anemostatovej krabice podľa priemeru kruhového pripojenia.
+// Používa sa aj pre predvyplnenie poľa D, aj pre kontrolu – jedno miesto pravdy.
+function anemVyskaKrabice(c) {
+  const C = +c;
+  if (!C) return 250;
+  if (C <= 200) return 250;   // nástavce do fi 200
+  if (C <= 250) return 300;   // nástavec 250
+  return 340;                 // nástavec 315
+}
+
 const KONTROLA = {
 
   // ─── RUK ─────────────────────────────────────────
@@ -1130,9 +1416,25 @@ const KONTROLA = {
       if (!r.B) missing.push('B');
       if (missing.length > 0) return { status: 'CHYBA', text: `CHYBA – ZADAJTE ${missing.join(', ')}` };
       const reasons = [];
-      if (!STD_DIMS_ROUND.includes(A)) reasons.push('A');
+      const STD_A = [100,125,140,160,180,200,224,250,280,315,355,400,450,500,560,630,710,800,900,1000,1120,1250];
+      const STD_B = [500,1000,1500];
+
+      // Minimálna vyrobiteľná dĺžka
+      if (B < 100) {
+        return { status: 'CHYBA', text: 'NIE JE MOŽNÉ VYROBIŤ: MINIMÁLNA DĹŽKA JE 100' };
+      }
+
+      // Priemer 80 – maximálna vyrobiteľná dĺžka je 1000 mm
+      if (A === 80 && B > 1000) {
+        return { status: 'CHYBA', text: 'NIE JE MOŽNÉ VYROBIŤ: PRI PRIEMERE 80 MAX DĹŽKA 1000' };
+      }
+
+      if (!STD_A.includes(A)) reasons.push('A');
+
+      // Dĺžka – štandard 500/1000/1500, pri priemeroch do 160 je limit 1000
       const maxB = A <= 160 ? 1000 : 1500;
-      if (B > maxB) reasons.push('B');
+      if (!STD_B.includes(B) || B > maxB) reasons.push('B');
+
       if (reasons.length > 0) return { status: 'ATYP', text: `ATYP – PARAMETER ${reasons.join(', ')}` };
       return { status: 'OK', text: 'OK – ŠTANDARD' };
     }
@@ -1147,10 +1449,17 @@ const KONTROLA = {
       if (!r.A) missing.push('A');
       if (!r.B) missing.push('B');
       if (missing.length > 0) return { status: 'CHYBA', text: `CHYBA – ZADAJTE ${missing.join(', ')}` };
-      const STD_RUS = [80,100,125,140,160,180,200,224,250,280,315,355,400,450,500,560,630,710,800,900,1000,1120,1250];
+      const STD_A = [80,100,125,140,160,180,200,224,250,280,315,355,400,450,500,560,630,710,800,900,1000,1120,1250];
+      const STD_B = [1000,2000,3000];
+
+      // Dĺžka mimo vyrobiteľného rozsahu
+      if (B < 100 || B > 3000) {
+        return { status: 'CHYBA', text: 'NIE JE MOŽNÉ VYROBIŤ: DĹŽKA MUSÍ BYŤ 100–3000' };
+      }
+
       const reasons = [];
-      if (!STD_RUS.includes(A)) reasons.push('A');
-      if (B > 3000) reasons.push('B');
+      if (!STD_A.includes(A)) reasons.push('A');
+      if (!STD_B.includes(B)) reasons.push('B');
       if (reasons.length > 0) return { status: 'ATYP', text: `ATYP – PARAMETER ${reasons.join(', ')}` };
       return { status: 'OK', text: 'OK – ŠTANDARD' };
     }
@@ -1265,6 +1574,47 @@ const KONTROLA = {
     }
   },
 
+  // ─── KOLHPR ───────────────────────────────────────
+  // Ako KOLHPR90, ale s voliteľným uhlom D (10–90°)
+  KOLHPR: {
+    check(r) {
+      if (!r.A && !r.B && !r.C) return null;
+      const missing = [];
+      if (!r.A) missing.push('A');
+      if (!r.B) missing.push('B');
+      if (!r.C) missing.push('C');
+      if (!r.D) missing.push('D');
+      if (!r.G) missing.push('G');
+      if (missing.length > 0) return { status: 'CHYBA', text: `CHYBA – ZADAJTE ${missing.join(', ')}` };
+
+      const A = +r.A, B = +r.B, C = +r.C, D = +r.D, G = +r.G;
+      const STD_ABC = [100,110,125,140,160,180,200,225,250,280,315,355,400,450,500,560,630,710,800,900,1000,1120,1250,1400,1600,1800];
+      const STD_D   = [15,30,45,60,90];
+      const STD_G   = [150,200,300];
+
+      // Uhol mimo vyrobiteľného rozsahu
+      if (D < 10 || D > 90) {
+        return { status: 'CHYBA', text: 'NIE JE MOŽNÉ VYROBIŤ: UHOL MUSÍ BYŤ 10–90°' };
+      }
+
+      const kA = !STD_ABC.includes(A) ? (A > 1800 ? 2 : 1) : 0;
+      const kB = !STD_ABC.includes(B) ? (B > 1800 ? 2 : 1) : 0;
+      const kC = !STD_ABC.includes(C) ? (C > 1800 ? 2 : 1) : 0;
+      const kD = !STD_D.includes(D) ? 1 : 0;
+      const kG = !STD_G.includes(G) ? 1 : 0;
+
+      if (kA === 2 || kB === 2 || kC === 2) return { status: 'ATYP', text: 'ATYP – NADROZMERNÝ PRVOK' };
+      const reasons = [];
+      if (kA === 1) reasons.push('A');
+      if (kB === 1) reasons.push('B');
+      if (kC === 1) reasons.push('C');
+      if (kD === 1) reasons.push('D');
+      if (kG === 1) reasons.push('G');
+      if (reasons.length > 0) return { status: 'ATYP', text: `ATYP – PARAMETER ${reasons.join(', ')}` };
+      return { status: 'OK', text: 'OK – ŠTANDARD' };
+    }
+  },
+
   // ─── OBLK45 ───────────────────────────────────────
   OBLK45: {
     check(r) {
@@ -1288,6 +1638,36 @@ const KONTROLA = {
       const kA = !STD_A.includes(A) ? (A > 1250 ? 2 : 1) : 0;
       if (kA === 2) return { status: 'ATYP', text: 'ATYP – NADROZMERNÝ PRVOK' };
       if (kA === 1) return { status: 'ATYP', text: 'ATYP – PARAMETER A' };
+      return { status: 'OK', text: 'OK – ŠTANDARD' };
+    }
+  },
+
+  // ─── OBLK1 ────────────────────────────────────────
+  // Ako OBLK45/90, ale s voliteľným uhlom C (10–90°)
+  OBLK1: {
+    check(r) {
+      if (!r.A && !r.C) return null;
+      const missing = [];
+      if (!r.A) missing.push('A');
+      if (!r.C) missing.push('C');
+      if (missing.length > 0) return { status: 'CHYBA', text: `CHYBA – ZADAJTE ${missing.join(', ')}` };
+
+      const A = +r.A, C = +r.C;
+      const STD_A = [80,100,125,140,160,180,200,224,250,280,315,355,400,450,500,560,630,710,800,900,1000,1120,1250];
+      const STD_C = [15,30,45,60,90];
+
+      // Uhol mimo vyrobiteľného rozsahu
+      if (C < 10 || C > 90) {
+        return { status: 'CHYBA', text: 'NIE JE MOŽNÉ VYROBIŤ: UHOL MUSÍ BYŤ 10–90°' };
+      }
+
+      const kA = !STD_A.includes(A) ? (A > 1250 ? 2 : 1) : 0;
+      if (kA === 2) return { status: 'ATYP', text: 'ATYP – NADROZMERNÝ PRVOK' };
+
+      const reasons = [];
+      if (kA === 1) reasons.push('A');
+      if (!STD_C.includes(C)) reasons.push('C');
+      if (reasons.length > 0) return { status: 'ATYP', text: `ATYP – PARAMETER ${reasons.join(', ')}` };
       return { status: 'OK', text: 'OK – ŠTANDARD' };
     }
   },
@@ -1351,6 +1731,47 @@ const KONTROLA = {
       if (kA === 1) reasons.push('A');
       if (kB === 1) reasons.push('B');
       if (kC === 1) reasons.push('C');
+      if (kG === 1) reasons.push('G');
+      if (reasons.length > 0) return { status: 'ATYP', text: `ATYP – PARAMETER ${reasons.join(', ')}` };
+      return { status: 'OK', text: 'OK – ŠTANDARD' };
+    }
+  },
+
+  // ─── OBLHPR ───────────────────────────────────────
+  // Ako OBLHPR90, ale s voliteľným uhlom D (10–90°)
+  OBLHPR: {
+    check(r) {
+      if (!r.A && !r.B && !r.C) return null;
+      const missing = [];
+      if (!r.A) missing.push('A');
+      if (!r.B) missing.push('B');
+      if (!r.C) missing.push('C');
+      if (!r.D) missing.push('D');
+      if (!r.G) missing.push('G');
+      if (missing.length > 0) return { status: 'CHYBA', text: `CHYBA – ZADAJTE ${missing.join(', ')}` };
+
+      const A = +r.A, B = +r.B, C = +r.C, D = +r.D, G = +r.G;
+      const STD_ABC = [100,110,125,140,160,180,200,225,250,280,315,355,400,450,500,560,630,710,800,900,1000,1120,1250,1400,1600,1800];
+      const STD_D   = [15,30,45,60,90];
+      const STD_G   = [150,200,300];
+
+      // Uhol mimo vyrobiteľného rozsahu
+      if (D < 10 || D > 90) {
+        return { status: 'CHYBA', text: 'NIE JE MOŽNÉ VYROBIŤ: UHOL MUSÍ BYŤ 10–90°' };
+      }
+
+      const kA = !STD_ABC.includes(A) ? (A > 1800 ? 2 : 1) : 0;
+      const kB = !STD_ABC.includes(B) ? (B > 1800 ? 2 : 1) : 0;
+      const kC = !STD_ABC.includes(C) ? (C > 1800 ? 2 : 1) : 0;
+      const kD = !STD_D.includes(D) ? 1 : 0;
+      const kG = !STD_G.includes(G) ? 1 : 0;
+
+      if (kA === 2 || kB === 2 || kC === 2) return { status: 'ATYP', text: 'ATYP – NADROZMERNÝ PRVOK' };
+      const reasons = [];
+      if (kA === 1) reasons.push('A');
+      if (kB === 1) reasons.push('B');
+      if (kC === 1) reasons.push('C');
+      if (kD === 1) reasons.push('D');
       if (kG === 1) reasons.push('G');
       if (reasons.length > 0) return { status: 'ATYP', text: `ATYP – PARAMETER ${reasons.join(', ')}` };
       return { status: 'OK', text: 'OK – ŠTANDARD' };
@@ -1588,6 +2009,11 @@ const KONTROLA = {
       const STD_AB = [80,100,125,140,160,180,200,224,250,280,315,355,400,450,500,560,630,710,800,900,1000,1120,1250];
       const STD_C  = [200,300,500,750,1000];
 
+      // Minimálna vyrobiteľná dĺžka
+      if (C < 100) {
+        return { status: 'CHYBA', text: 'NIE JE MOŽNÉ VYROBIŤ: MINIMÁLNA DĹŽKA JE 100' };
+      }
+
       const reasons = [];
       if (!STD_AB.includes(A)) reasons.push('A');
       if (!STD_AB.includes(B)) reasons.push('B');
@@ -1800,7 +2226,370 @@ const KONTROLA = {
   },
 
 
+  // ─── VOLNA ────────────────────────────────────────
+  // Voľná položka – bez kontroly rozmerov, vždy atyp
+  VOLNA: {
+    check(r) {
+      return { status: 'ATYP', text: 'ATYP – VOĽNÁ POLOŽKA' };
+    }
+  },
+
+  // ─── RK KS / RK KR ────────────────────────────────
+  // Technológia – rozmerová rada ako RUS, zvyšok atyp
+  'RK KS': {
+    check(r) {
+      if (!r.A) return null;
+      const A = +r.A;
+      const STD_A = [80,100,125,140,160,180,200,224,250,280,315,355,400,450,500,560,630,710,800,900,1000,1120,1250];
+      if (!STD_A.includes(A)) return { status: 'ATYP', text: 'ATYP – PARAMETER A' };
+      return { status: 'OK', text: 'OK – ŠTANDARD' };
+    }
+  },
+  'RK KR': {
+    check(r) {
+      if (!r.A) return null;
+      const A = +r.A;
+      const STD_A = [80,100,125,140,160,180,200,224,250,280,315,355,400,450,500,560,630,710,800,900,1000,1120,1250];
+      if (!STD_A.includes(A)) return { status: 'ATYP', text: 'ATYP – PARAMETER A' };
+      return { status: 'OK', text: 'OK – ŠTANDARD' };
+    }
+  },
+
+  // ─── RK HS / RK HR ────────────────────────────────
+  // Technológia hranatá – rozmerová rada ako RUH
+  'RK HS': {
+    check(r) {
+      if (!r.A && !r.B) return null;
+      const missing = [];
+      if (!r.A) missing.push('A');
+      if (!r.B) missing.push('B');
+      if (missing.length > 0) return { status: 'CHYBA', text: `CHYBA – ZADAJTE ${missing.join(', ')}` };
+
+      const A = +r.A, B = +r.B;
+      const STD = [100,125,160,200,250,315,355,400,450,500,560,630,710,800,900,1000,1120,1250,1400,1600,1800];
+      const reasons = [];
+      if (!STD.includes(A)) reasons.push('A');
+      if (!STD.includes(B)) reasons.push('B');
+      if (reasons.length > 0) return { status: 'ATYP', text: `ATYP – PARAMETER ${reasons.join(', ')}` };
+      return { status: 'OK', text: 'OK – ŠTANDARD' };
+    }
+  },
+  'RK HR': {
+    check(r) {
+      if (!r.A && !r.B) return null;
+      const missing = [];
+      if (!r.A) missing.push('A');
+      if (!r.B) missing.push('B');
+      if (missing.length > 0) return { status: 'CHYBA', text: `CHYBA – ZADAJTE ${missing.join(', ')}` };
+
+      const A = +r.A, B = +r.B;
+      const STD = [100,125,160,200,250,315,355,400,450,500,560,630,710,800,900,1000,1120,1250,1400,1600,1800];
+      const reasons = [];
+      if (!STD.includes(A)) reasons.push('A');
+      if (!STD.includes(B)) reasons.push('B');
+      if (reasons.length > 0) return { status: 'ATYP', text: `ATYP – PARAMETER ${reasons.join(', ')}` };
+      return { status: 'OK', text: 'OK – ŠTANDARD' };
+    }
+  },
+
+  // ─── PZ AL Sito / PZ ZN Sito ──────────────────────
+  // Rozmerová rada ako RUH, ale šírka max 1000
+  // (nad 1000 sa žalúzia musí deliť → atyp)
+  'PZ AL Sito': {
+    check(r) {
+      if (!r.A && !r.B) return null;
+      const missing = [];
+      if (!r.A) missing.push('A');
+      if (!r.B) missing.push('B');
+      if (missing.length > 0) return { status: 'CHYBA', text: `CHYBA – ZADAJTE ${missing.join(', ')}` };
+
+      const A = +r.A, B = +r.B;
+      const STD = [100,125,160,200,250,315,355,400,450,500,560,630,710,800,900,1000,1120,1250,1400,1600,1800];
+      const reasons = [];
+      if (!STD.includes(A) || A > 1000) reasons.push('A');
+      if (!STD.includes(B)) reasons.push('B');
+      if (reasons.length > 0) return { status: 'ATYP', text: `ATYP – PARAMETER ${reasons.join(', ')}` };
+      return { status: 'OK', text: 'OK – ŠTANDARD' };
+    }
+  },
+  'PZ ZN Sito': {
+    check(r) {
+      if (!r.A && !r.B) return null;
+      const missing = [];
+      if (!r.A) missing.push('A');
+      if (!r.B) missing.push('B');
+      if (missing.length > 0) return { status: 'CHYBA', text: `CHYBA – ZADAJTE ${missing.join(', ')}` };
+
+      const A = +r.A, B = +r.B;
+      const STD = [100,125,160,200,250,315,355,400,450,500,560,630,710,800,900,1000,1120,1250,1400,1600,1800];
+      const reasons = [];
+      if (!STD.includes(A) || A > 1000) reasons.push('A');
+      if (!STD.includes(B)) reasons.push('B');
+      if (reasons.length > 0) return { status: 'ATYP', text: `ATYP – PARAMETER ${reasons.join(', ')}` };
+      return { status: 'OK', text: 'OK – ŠTANDARD' };
+    }
+  },
+
+  // ─── KS K / KM K ──────────────────────────────────
+  // Rozmerová rada ako RUS, zvyšok atyp
+  'KS K': {
+    check(r) {
+      if (!r.A) return null;
+      const A = +r.A;
+      const STD_A = [80,100,125,140,160,180,200,224,250,280,315,355,400,450,500,560,630,710,800,900,1000,1120,1250];
+      if (!STD_A.includes(A)) return { status: 'ATYP', text: 'ATYP – PARAMETER A' };
+      return { status: 'OK', text: 'OK – ŠTANDARD' };
+    }
+  },
+  'KM K': {
+    check(r) {
+      if (!r.A) return null;
+      const A = +r.A;
+      const STD_A = [80,100,125,140,160,180,200,224,250,280,315,355,400,450,500,560,630,710,800,900,1000,1120,1250];
+      if (!STD_A.includes(A)) return { status: 'ATYP', text: 'ATYP – PARAMETER A' };
+      return { status: 'OK', text: 'OK – ŠTANDARD' };
+    }
+  },
+  'KM KN': {
+    check(r) {
+      if (!r.A) return null;
+      const A = +r.A;
+      const STD_A = [80,100,125,140,160,180,200,224,250,280,315,355,400,450,500,560,630,710,800,900,1000,1120,1250];
+      if (!STD_A.includes(A)) return { status: 'ATYP', text: 'ATYP – PARAMETER A' };
+      return { status: 'OK', text: 'OK – ŠTANDARD' };
+    }
+  },
+  'CAGI N': {
+    check(r) {
+      if (!r.A) return null;
+      const A = +r.A;
+      const STD_A = [80,100,125,140,160,180,200,224,250,280,315,355,400,450,500,560,630,710,800,900,1000,1120,1250];
+      if (!STD_A.includes(A)) return { status: 'ATYP', text: 'ATYP – PARAMETER A' };
+      return { status: 'OK', text: 'OK – ŠTANDARD' };
+    }
+  },
+  'CAGI P': {
+    check(r) {
+      if (!r.A) return null;
+      const A = +r.A;
+      const STD_A = [80,100,125,140,160,180,200,224,250,280,315,355,400,450,500,560,630,710,800,900,1000,1120,1250];
+      if (!STD_A.includes(A)) return { status: 'ATYP', text: 'ATYP – PARAMETER A' };
+      return { status: 'OK', text: 'OK – ŠTANDARD' };
+    }
+  },
+  'VHK N': {
+    check(r) {
+      if (!r.A) return null;
+      const A = +r.A;
+      const STD_A = [80,100,125,140,160,180,200,224,250,280,315,355,400,450,500,560,630,710,800,900,1000,1120,1250];
+      if (!STD_A.includes(A)) return { status: 'ATYP', text: 'ATYP – PARAMETER A' };
+      return { status: 'OK', text: 'OK – ŠTANDARD' };
+    }
+  },
+  'VHK P': {
+    check(r) {
+      if (!r.A) return null;
+      const A = +r.A;
+      const STD_A = [80,100,125,140,160,180,200,224,250,280,315,355,400,450,500,560,630,710,800,900,1000,1120,1250];
+      if (!STD_A.includes(A)) return { status: 'ATYP', text: 'ATYP – PARAMETER A' };
+      return { status: 'OK', text: 'OK – ŠTANDARD' };
+    }
+  },
+
+  // ─── VHH ──────────────────────────────────────────
+  // Hranatá – rozmerová rada ako RUH
+  'VHH': {
+    check(r) {
+      if (!r.A && !r.B) return null;
+      const missing = [];
+      if (!r.A) missing.push('A');
+      if (!r.B) missing.push('B');
+      if (missing.length > 0) return { status: 'CHYBA', text: `CHYBA – ZADAJTE ${missing.join(', ')}` };
+
+      const A = +r.A, B = +r.B;
+      const STD = [100,125,160,200,250,315,355,400,450,500,560,630,710,800,900,1000,1120,1250,1400,1600,1800];
+      const reasons = [];
+      if (!STD.includes(A)) reasons.push('A');
+      if (!STD.includes(B)) reasons.push('B');
+      if (reasons.length > 0) return { status: 'ATYP', text: `ATYP – PARAMETER ${reasons.join(', ')}` };
+      return { status: 'OK', text: 'OK – ŠTANDARD' };
+    }
+  },
+
+  // ─── TV H ─────────────────────────────────────────
+  // Hranatá – rada ako RUH, dĺžka C je pevná 100 mm
+  'TV H': {
+    check(r) {
+      if (!r.A && !r.B) return null;
+      const missing = [];
+      if (!r.A) missing.push('A');
+      if (!r.B) missing.push('B');
+      if (missing.length > 0) return { status: 'CHYBA', text: `CHYBA – ZADAJTE ${missing.join(', ')}` };
+
+      const A = +r.A, B = +r.B;
+      const STD = [100,125,160,200,250,315,355,400,450,500,560,630,710,800,900,1000,1120,1250,1400,1600,1800];
+      const reasons = [];
+      if (!STD.includes(A)) reasons.push('A');
+      if (!STD.includes(B)) reasons.push('B');
+      if (reasons.length > 0) return { status: 'ATYP', text: `ATYP – PARAMETER ${reasons.join(', ')}` };
+      return { status: 'OK', text: 'OK – ŠTANDARD' };
+    }
+  },
+
+  // ─── TV K ─────────────────────────────────────────
+  // Kruhová – rada ako RUS, dĺžka B je pevná 100 mm
+  'TV K': {
+    check(r) {
+      if (!r.A) return null;
+      const A = +r.A;
+      const STD_A = [80,100,125,140,160,180,200,224,250,280,315,355,400,450,500,560,630,710,800,900,1000,1120,1250];
+      if (!STD_A.includes(A)) return { status: 'ATYP', text: 'ATYP – PARAMETER A' };
+      return { status: 'OK', text: 'OK – ŠTANDARD' };
+    }
+  },
+
+  // ─── TCV H ────────────────────────────────────────
+  // Vlastná rozmerová rada (šírka od 50 – bez plošného minima 80)
+  'TCV H': {
+    check(r) {
+      if (!r.A && !r.B && !r.C) return null;
+      const missing = [];
+      if (!r.A) missing.push('A');
+      if (!r.B) missing.push('B');
+      if (!r.C) missing.push('C');
+      if (missing.length > 0) return { status: 'CHYBA', text: `CHYBA – ZADAJTE ${missing.join(', ')}` };
+
+      const A = +r.A, B = +r.B, C = +r.C;
+      const STD_A = [50,100,150,200];
+      const STD_B = [100,200,300,400,500,600,700,800,900,1000];
+      const STD_C = [200,300,400,500,600,700,800,900,1000,1100,1200,1300,1400,1500];
+
+      const reasons = [];
+      if (!STD_A.includes(A)) reasons.push('A');
+      if (!STD_B.includes(B)) reasons.push('B');
+      if (!STD_C.includes(C)) reasons.push('C');
+      if (reasons.length > 0) return { status: 'ATYP', text: `ATYP – PARAMETER ${reasons.join(', ')}` };
+      return { status: 'OK', text: 'OK – ŠTANDARD' };
+    }
+  },
+
+  // ─── TH K ─────────────────────────────────────────
+  // Priemer ako RUS, dĺžka len 600 alebo 900
+  'TH K': {
+    check(r) {
+      if (!r.A && !r.B) return null;
+      const missing = [];
+      if (!r.A) missing.push('A');
+      if (!r.B) missing.push('B');
+      if (missing.length > 0) return { status: 'CHYBA', text: `CHYBA – ZADAJTE ${missing.join(', ')}` };
+
+      const A = +r.A, B = +r.B;
+      const STD_A = [80,100,125,140,160,180,200,224,250,280,315,355,400,450,500,560,630,710,800,900,1000,1120,1250];
+      const STD_B = [600,900];
+
+      const reasons = [];
+      if (!STD_A.includes(A)) reasons.push('A');
+      if (!STD_B.includes(B)) reasons.push('B');
+      if (reasons.length > 0) return { status: 'ATYP', text: `ATYP – PARAMETER ${reasons.join(', ')}` };
+      return { status: 'OK', text: 'OK – ŠTANDARD' };
+    }
+  },
+
+  // ─── ANEM-H P-O / ANEM-V P-O ──────────────────────
+  // Kazeta A,B = hranatá rada (RUH); pripojenie C = kruhová rada do 315;
+  // výška krabice D závisí od pripojenia (anemVyskaKrabice)
+  'ANEM-H P-O': {
+    check(r) { return checkAnemKrabica(r); }
+  },
+  'ANEM-V P-O': {
+    check(r) { return checkAnemKrabica(r); }
+  },
+
+  // ─── KM H-NA SB / KM H-RAMIK ──────────────────────
+  // Hranatá rada ako RUH, ale oba rozmery max 1000
+  'KM H-NA SB': {
+    check(r) { return checkKryciaMriezkaH(r); }
+  },
+  'KM H-RAMIK': {
+    check(r) { return checkKryciaMriezkaH(r); }
+  },
+
+  // ─── PRK2 ─────────────────────────────────────────
+  // Ako PRKS, ale D (excentricita) je zadávané, môže byť aj záporné/0
+  PRK2: {
+    check(r) {
+      if (!r.A && !r.B && !r.C) return null;
+      const missing = [];
+      if (!r.A) missing.push('A');
+      if (!r.B) missing.push('B');
+      if (!r.C) missing.push('C');
+      if (r.D === '' || r.D == null) missing.push('D');
+      if (missing.length > 0) return { status: 'CHYBA', text: `CHYBA – ZADAJTE ${missing.join(', ')}` };
+
+      const A = +r.A, B = +r.B, C = +r.C;
+      const STD_AB = [80,100,125,140,160,180,200,224,250,280,315,355,400,450,500,560,630,710,800,900,1000,1120,1250];
+      const STD_C  = [200,300,500,750,1000];
+
+      // Minimálna vyrobiteľná dĺžka
+      if (C < 100) {
+        return { status: 'CHYBA', text: 'NIE JE MOŽNÉ VYROBIŤ: MINIMÁLNA DĹŽKA JE 100' };
+      }
+
+      const reasons = [];
+      if (!STD_AB.includes(A)) reasons.push('A');
+      if (!STD_AB.includes(B)) reasons.push('B');
+      if (!STD_C.includes(C))  reasons.push('C');
+      // D môže mať ľubovoľnú hodnotu (aj zápornú alebo 0) – nekontroluje sa
+      if (reasons.length > 0) return { status: 'ATYP', text: `ATYP – PARAMETER ${reasons.join(', ')}` };
+      return { status: 'OK', text: 'OK – ŠTANDARD' };
+    }
+  },
+
 }; // end KONTROLA
+
+// Spoločná kontrola pre hranaté krycie mriežky (max rozmer 1000)
+function checkKryciaMriezkaH(r) {
+  if (!r.A && !r.B) return null;
+  const missing = [];
+  if (!r.A) missing.push('A');
+  if (!r.B) missing.push('B');
+  if (missing.length > 0) return { status: 'CHYBA', text: `CHYBA – ZADAJTE ${missing.join(', ')}` };
+
+  const A = +r.A, B = +r.B;
+  const STD = [100,125,160,200,250,315,355,400,450,500,560,630,710,800,900,1000,1120,1250,1400,1600,1800];
+
+  const reasons = [];
+  if (!STD.includes(A) || A > 1000) reasons.push('A');
+  if (!STD.includes(B) || B > 1000) reasons.push('B');
+
+  if (reasons.length > 0) return { status: 'ATYP', text: `ATYP – PARAMETER ${reasons.join(', ')}` };
+  return { status: 'OK', text: 'OK – ŠTANDARD' };
+}
+
+// Spoločná kontrola pre anemostatové krabice (horizontálne aj vertikálne pripojenie)
+function checkAnemKrabica(r) {
+  if (!r.A && !r.B && !r.C) return null;
+  const missing = [];
+  if (!r.A) missing.push('A');
+  if (!r.B) missing.push('B');
+  if (!r.C) missing.push('C');
+  if (!r.D) missing.push('D');
+  if (missing.length > 0) return { status: 'CHYBA', text: `CHYBA – ZADAJTE ${missing.join(', ')}` };
+
+  const A = +r.A, B = +r.B, C = +r.C, D = +r.D;
+  // Kazety majú vlastnú rozmerovú radu (nie hranatú radu potrubia)
+  const STD_AB = [100,200,300,400,500,600,700,800,900,1000];
+  const STD_C  = [80,100,125,140,160,180,200,224,250,280,315];
+
+  const reasons = [];
+  if (!STD_AB.includes(A)) reasons.push('A');
+  if (!STD_AB.includes(B)) reasons.push('B');
+  if (!STD_C.includes(C))  reasons.push('C');
+  if (D !== anemVyskaKrabice(C)) reasons.push('D');
+
+  if (reasons.length > 0) return { status: 'ATYP', text: `ATYP – PARAMETER ${reasons.join(', ')}` };
+  return { status: 'OK', text: 'OK – ŠTANDARD' };
+}
 
 // Pomocná funkcia – vráti výsledok kontroly pre riadok
 function getKontrolaResult(row) {
@@ -1943,9 +2732,10 @@ function render() {
         const val = row[col] || '';
         const isInvalid = row._committed && isReq && !val;
         const ti = tiCounter++;
-        const isNumeric = (pDef.type === 'dim' || pDef.type === 'len' || pDef.type === 'angle');
+        const isNumeric = (pDef.type === 'dim' || pDef.type === 'len' || pDef.type === 'angle' || pDef.type === 'signed');
+        const isSigned = (pDef.type === 'signed');
         const numAttrs = isNumeric
-          ? `onkeypress="return filterNumberKey(event)" onpaste="return filterNumberPaste(event)"`
+          ? `onkeypress="return filterNumberKey(event)" onpaste="return filterNumberPaste(event)"${isSigned ? ' data-signed="1"' : ''}`
           : '';
         if (pDef.type === 'select') {
           const opts = pDef.options.map(o => `<option value="${o}" ${val===o?'selected':''}>${o||'–'}</option>`).join('');
@@ -2038,14 +2828,24 @@ function render() {
 function filterNumberKey(event) {
   const char = event.key;
   if (char >= '0' && char <= '9') return true;
+  // Znamienko mínus – povolené len pre polia typu 'signed' a len na začiatku
+  if (char === '-') {
+    const el = event.target;
+    const isSigned = el.getAttribute('data-signed') === '1';
+    if (isSigned && el.selectionStart === 0 && !el.value.includes('-')) return true;
+  }
   return false;
 }
 
 function filterNumberPaste(event) {
   event.preventDefault();
   const pasted = (event.clipboardData || window.clipboardData).getData('text');
-  let v = pasted.replace(/[^0-9]/g, '');
   const input = event.target;
+  const isSigned = input.getAttribute('data-signed') === '1';
+  // Pre signed polia povolíme voliteľné vedúce mínus
+  let v = isSigned
+    ? pasted.replace(/[^0-9-]/g, '').replace(/(?!^)-/g, '')
+    : pasted.replace(/[^0-9]/g, '');
   const start = input.selectionStart;
   const end = input.selectionEnd;
   input.value = input.value.slice(0, start) + v + input.value.slice(end);
@@ -2067,13 +2867,13 @@ const KodSorter = {
     RUHD_G:      ['RUHD'],
     RUK_G:       ['RUK'],
     RUS_G:       ['RUS'],
-    OBLUK_H:     ['OBLH', 'OBLHPR90', 'KOLH', 'KOLHPR90'],
-    OBLUK_K:     ['OBLK90', 'OBLK45'],
+    OBLUK_H:     ['OBLH', 'OBLHPR90', 'OBLHPR', 'KOLH', 'KOLHPR90', 'KOLHPR'],
+    OBLUK_K:     ['OBLK90', 'OBLK45', 'OBLK1'],
     NASTH:       ['NASH', 'NASHN'],
     NASTK:       ['NASTK'],
     PRECHOD_HH:  ['PRH1', 'PRH1K', 'PRH1S'],
     PRECHOD_HK:  ['PRHK1', 'PRHK1S'],
-    PRECHOD_KH:  ['PRKS'],
+    PRECHOD_KH:  ['PRKS', 'PRK2'],
     ODSKOK:      ['ODH1'],
     ROZH:        ['ROZH2', 'ROZH7', 'ROZH10'],
     ROZK:        ['ROZK1', 'ROZK90'],
@@ -2154,6 +2954,13 @@ const KodSorter = {
                  'PRECHOD_HH','PRECHOD_HK','SPOJH'],
   },
 
+  // ── Technologické položky ────────────────────────
+  // Používajú sa zriedka – v zozname sú vždy na konci,
+  // nikdy sa neponúkajú dopredu bez ohľadu na predchádzajúci prvok.
+  TECH: ['RK KS', 'RK KR', 'RK HS', 'RK HR', 'PZ AL Sito', 'PZ ZN Sito', 'KS K', 'KM K', 'KM KN', 'CAGI N', 'CAGI P', 'VHK N', 'VHK P', 'VHH', 'TV H', 'TV K', 'TCV H', 'TH K', 'ANEM-H P-O', 'ANEM-V P-O', 'KM H-NA SB', 'KM H-RAMIK'],
+
+  isTech(kod) { return this.TECH.includes(kod); },
+
   // ── Pomocná: zisti skupinu kódu ──────────────────
   getGroup(kod) {
     for (const [grp, kods] of Object.entries(this.GROUPS)) {
@@ -2171,6 +2978,8 @@ const KodSorter = {
     if (!order) return allKods;
 
     const priority = (kod) => {
+      // Technológia vždy úplne na konci
+      if (this.isTech(kod)) return 99999 + this.TECH.indexOf(kod);
       const grp = this.getGroup(kod);
       const grpIdx = order.indexOf(grp);
       if (grpIdx === -1) return 9999;
@@ -2198,16 +3007,24 @@ function kodRenderOptions(dd, filter, selectedKod, rowIdx) {
   if (matches.length === 0) {
     dd.innerHTML = `<div class="kod-option" style="color:var(--text-muted);font-style:italic">Žiadna zhoda</div>`;
   } else {
-    dd.innerHTML = matches.map((k, i) => {
+    let html = '';
+    let sepDone = false;
+    matches.forEach((k, i) => {
+      // Sivý oddeľovač pred prvou technologickou položkou
+      if (!sepDone && KodSorter.isTech(k) && i > 0) {
+        html += `<div class="kod-separator">TECHNOLÓGIA</div>`;
+        sepDone = true;
+      }
       const tv = TVAROVKY[k];
       const labelShort = tv.label.replace(/^[^–]+ – /, '');
-      return `<div class="kod-option ${k===selectedKod?'selected':''}" 
+      html += `<div class="kod-option ${k===selectedKod?'selected':''}" 
         data-kod="${k}" data-idx="${i}"
         onmousedown="kodSelect(event)">
         <span class="kod-option-code">${k}</span>
         <span class="kod-option-label">${labelShort}</span>
       </div>`;
-    }).join('');
+    });
+    dd.innerHTML = html;
   }
   dd.classList.add('open');
 }
@@ -2463,7 +3280,7 @@ function tryAutoSplitRUH(rowIdx) {
       A: row.A, B: row.B,      // rovnaké rozmery
       C: String(ruhd),
       D:'',E:'',F:'',G:'',H:'',I:'',J:'',K:'',L:'',M:'',N:'',O:'',
-      priruba_C1:'', priruba_C2:'', priruba_C3:'',
+      ...prirubaDefaultsFor('RUHD'),
       poznamka: '',
       _committed: true,
       _splitDone: true,        // aby sa RUHD nedelilo
@@ -2487,10 +3304,12 @@ function revealDimSuggestion(rowIdx, key, el) {
   if (si === -1) return;
   if (row[key]) return; // Už je vyplnené – nič nerob
   const s = row._dimSuggestions[si];
-  row[key] = s.val;
+  // Hodnota môže byť aj funkcia – dopočíta sa z už vyplnených polí riadku
+  const val = (typeof s.val === 'function') ? String(s.val(row)) : s.val;
+  row[key] = val;
   row._dimSuggestions.splice(si, 1);
   if (el && el.tagName === 'INPUT') {
-    el.value = s.val;
+    el.value = val;
     el.select();
   }
 }
@@ -2540,10 +3359,13 @@ const DIM_PARAMS = {
   RUHD:     ['A','B'],
   KOLH:     ['A','B'],
   KOLHPR90: ['A','B','C'],
+  KOLHPR:   ['A','B','C'],
   OBLK45:   ['A'],
   OBLK90:   ['A'],
+  OBLK1:    ['A'],
   OBLH:     ['A','B'],
   OBLHPR90: ['A','B','C'],
+  OBLHPR:   ['A','B','C'],
   NASH:     ['A','B'],
   NASHN:    ['A','B'],
   NASTK:    ['A'],
@@ -2554,6 +3376,7 @@ const DIM_PARAMS = {
   PRHK1:    ['A','B','C'],
   PRHK1S:   ['A','B','C'],
   PRKS:     ['A','B'],
+  PRK2:     ['A','B'],
   ROZH2:    ['A','B','C','D'],
   ROZH7:    ['A','B','C','D'],
   ROZH10:   ['A','B','D','E'],
@@ -2563,6 +3386,23 @@ const DIM_PARAMS = {
   SPOKV:    ['A'],
   ZSLH:     ['A','B'],
   ZSLK:     ['A'],
+  'RK KS':  ['A'],
+  'RK KR':  ['A'],
+  'RK HS':  ['A','B'],
+  'RK HR':  ['A','B'],
+  'PZ AL Sito': ['A','B'],
+  'PZ ZN Sito': ['A','B'],
+  'KS K':   ['A'],
+  'KM K':   ['A'],
+  'KM KN':  ['A'],
+  'CAGI N': ['A'],
+  'CAGI P': ['A'],
+  'VHK N':  ['A'],
+  'VHK P':  ['A'],
+  'VHH':    ['A','B'],
+  'TV H':   ['A','B'],
+  'TV K':   ['A'],
+  'TH K':   ['A'],
 };
 
 
@@ -2574,10 +3414,13 @@ const DIM_TYPES = {
   RUHD:     {A:'h', B:'h'},
   KOLH:     {A:'h', B:'h'},
   KOLHPR90: {A:'h', B:'h', C:'h'},
+  KOLHPR:   {A:'h', B:'h', C:'h'},
   OBLK45:   {A:'r'},
   OBLK90:   {A:'r'},
+  OBLK1:    {A:'r'},
   OBLH:     {A:'h', B:'h'},
   OBLHPR90: {A:'h', B:'h', C:'h'},
+  OBLHPR:   {A:'h', B:'h', C:'h'},
   NASH:     {A:'h', B:'h'},
   NASHN:    {A:'h', B:'h'},
   NASTK:    {A:'r'},
@@ -2588,6 +3431,7 @@ const DIM_TYPES = {
   PRHK1:    {A:'h', B:'h', C:'r'},
   PRHK1S:   {A:'h', B:'h', C:'r'},
   PRKS:     {A:'r', B:'r'},
+  PRK2:     {A:'r', B:'r'},
   ROZH2:    {A:'h', B:'h', C:'h', D:'h'},
   ROZH7:    {A:'h', B:'h', C:'h', D:'h'},
   ROZH10:   {A:'h', B:'h', D:'h', E:'h'},
@@ -2597,6 +3441,23 @@ const DIM_TYPES = {
   SPOKV:    {A:'r'},
   ZSLH:     {A:'h', B:'h'},
   ZSLK:     {A:'r'},
+  'RK KS':  {A:'r'},
+  'RK KR':  {A:'r'},
+  'RK HS':  {A:'h', B:'h'},
+  'RK HR':  {A:'h', B:'h'},
+  'PZ AL Sito': {A:'h', B:'h'},
+  'PZ ZN Sito': {A:'h', B:'h'},
+  'KS K':   {A:'r'},
+  'KM K':   {A:'r'},
+  'KM KN':  {A:'r'},
+  'CAGI N': {A:'r'},
+  'CAGI P': {A:'r'},
+  'VHK N':  {A:'r'},
+  'VHK P':  {A:'r'},
+  'VHH':    {A:'h', B:'h'},
+  'TV H':   {A:'h', B:'h'},
+  'TV K':   {A:'r'},
+  'TH K':   {A:'r'},
 };
 
 // OUTPUT_DIM_PARAMS with types: [{col, type}]
@@ -2607,8 +3468,11 @@ const OUTPUT_DIM_PARAMS = {
   PRHK1:    [{col:'C',type:'r'}],
   PRHK1S:   [{col:'C',type:'r'}],
   PRKS:     [{col:'B',type:'r'}],
+  PRK2:     [{col:'B',type:'r'}],
   KOLHPR90: [{col:'C',type:'h'},{col:'B',type:'h'}],
+  KOLHPR:   [{col:'C',type:'h'},{col:'B',type:'h'}],
   OBLHPR90: [{col:'C',type:'h'},{col:'B',type:'h'}],
+  OBLHPR:   [{col:'C',type:'h'},{col:'B',type:'h'}],
   ROZH2:    [{col:'C',type:'h'},{col:'B',type:'h'}],
   ROZH7:    [],
   ROZH10:   [],
@@ -2762,11 +3626,11 @@ function deleteRow(idx) {
 
 function changeKod(idx, kod) {
   PARAM_COLS.forEach(c => rows[idx][c] = '');
-  rows[idx].priruba_C1 = '';
-  rows[idx].priruba_C2 = '';
-  rows[idx].priruba_C3 = '';
   rows[idx].kod = kod;
   rows[idx]._splitDone = false;  // umožni opätovné delenie po zmene kódu
+
+  // Príruby – nastav predvolené hodnoty pre daný kód (inak vyčisti)
+  Object.assign(rows[idx], prirubaDefaultsFor(kod));
 
   // Apply dimension suggestions from previous row
   if (idx > 0) {
@@ -2774,14 +3638,22 @@ function changeKod(idx, kod) {
     applyDimSuggestions(rows[idx], prevVals);
   }
 
-  // Pridaj default hodnoty pre zásek (0) a radius (150) – objavia sa pri TAB, editovateľné
+  // Pridaj default hodnoty pre zásek (0), radius (150), dĺžku – objavia sa pri TAB, editovateľné
   const PARAM_DEFAULTS = {
     KOLH:     { D: '0', E: '0', F: '150' },
     OBLH:     { D: '0', E: '0', F: '150' },
     KOLHPR90: { E: '0', F: '0', G: '150' },
+    KOLHPR:   { E: '0', F: '0', G: '150' },
     OBLHPR90: { E: '0', F: '0', G: '150' },
+    OBLHPR:   { E: '0', F: '0', G: '150' },
     NASHN:    { C: '150' },
     ROZH2:    { E: '150', F: '150' },
+    ZSLK:     { B: '100' },
+    NASTK:    { B: '100' },
+    RUS:      { B: '3000' },
+    // Výška krabice sa dopočíta podľa už zadaného pripojenia C (prepísateľná)
+    'ANEM-H P-O': { D: (row) => anemVyskaKrabice(row.C) },
+    'ANEM-V P-O': { D: (row) => anemVyskaKrabice(row.C) },
   };
   if (PARAM_DEFAULTS[kod]) {
     const existing = rows[idx]._dimSuggestions || [];
