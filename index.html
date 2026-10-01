@@ -1136,7 +1136,7 @@ const TVAROVKY = {
       D: { req: true,  type: 'dim', label: 'Šírka 3 (mm)' },
       E: { req: true,  type: 'dim', label: 'Výška 2 (mm)' },      // zadáva sa (predvyplní sa výškou B)
       F: { req: true,  type: 'len', label: 'Dĺžka (mm)' },
-      G: { req: false, type: 'dim', label: 'Offset 1 (mm)' },
+      G: { req: true,  type: 'dim', label: 'Offset 1 (mm)' },     // povinný (štandard 100, 150, 200)
       H: { req: false, type: 'signed', label: 'Offset 2 (mm)' },   // bez obmedzenia, aj záporný
       I: { req: false, type: 'signed', label: 'Offset 3 (mm)' },   // bez obmedzenia, aj záporný
       J: { req: false, type: 'len', label: 'Hodnota J (mm)' },     // predvyplnená 30
@@ -2218,6 +2218,8 @@ const KONTROLA = {
   NASK: {
     check(r) {
       if (!r.A) return null;
+      // dĺžka B je povinná – pri potvrdení riadku sa sama doplní na 100 (DOPLNIT_PRI_POTVRDENI)
+      if (!r.B) return { status: 'CHYBA', text: 'CHYBA – ZADAJTE B' };
       const A = +r.A;
       const STD_A = [80,100,125,160,200,224,250,280,315,355,400,450,500,560,630,710,800,900,1000,1120,1250,1400,1600,1800];
       const kA = !STD_A.includes(A) ? (A > 1800 ? 2 : 1) : 0;
@@ -2235,6 +2237,7 @@ const KONTROLA = {
       if (!r.A) missing.push('A');
       if (!r.B) missing.push('B');
       if (!r.C) missing.push('C');
+      if (!r.F) missing.push('F');      // offset – povinný (0 je platná hodnota)
       if (missing.length > 0) return { status: 'CHYBA', text: `CHYBA – ZADAJTE ${missing.join(', ')}` };
 
       const A = +r.A, B = +r.B, C = +r.C;
@@ -2568,6 +2571,7 @@ const KONTROLA = {
       if (!r.A && !r.E) return null;
       const missing = [];
       if (!r.A) missing.push('A');
+      if (!r.B) missing.push('B');      // dĺžka – povinná
       if (!r.E) missing.push('E');
       if (!r.G) missing.push('G');
       if (missing.length > 0) return { status: 'CHYBA', text: `CHYBA – ZADAJTE ${missing.join(', ')}` };
@@ -2695,6 +2699,8 @@ const KONTROLA = {
   ZSLK: {
     check(r) {
       if (!r.A) return null;
+      // dĺžka B je povinná – pri potvrdení riadku sa sama doplní na 100 (DOPLNIT_PRI_POTVRDENI)
+      if (!r.B) return { status: 'CHYBA', text: 'CHYBA – ZADAJTE B' };
       const A = +r.A;
       const STD_A = [80,100,125,160,200,224,250,280,315,355,400,450,500,560,630,710,800,900,1000,1120,1250,1400,1600,1800];
       const kA = !STD_A.includes(A) ? (A > 1800 ? 2 : 1) : 0;
@@ -2706,6 +2712,8 @@ const KONTROLA = {
   ZSLKN: {
     check(r) {
       if (!r.A) return null;
+      // dĺžka B je povinná – pri potvrdení riadku sa sama doplní na 100 (DOPLNIT_PRI_POTVRDENI)
+      if (!r.B) return { status: 'CHYBA', text: 'CHYBA – ZADAJTE B' };
       const A = +r.A;
       const STD_A = [80,100,125,160,200,224,250,280,315,355,400,450,500,560,630,710,800,900,1000,1120,1250,1400,1600,1800];
       const kA = !STD_A.includes(A) ? (A > 1800 ? 2 : 1) : 0;
@@ -4319,6 +4327,10 @@ const DOPLNIT_PRI_POTVRDENI = {
   ROZH2: ['G', 'H', 'I', 'J', 'K', 'L', 'M', 'N'],
   ROZH7: ['J', 'K'],
   ROZK2: ['G'],
+  // Nástavec a záslepky kruhové: nevyplnená dĺžka B = 100
+  NASK:  ['B'],
+  ZSLK:  ['B'],
+  ZSLKN: ['B'],
   // Kolená a oblúky hranaté: nevyplnený zásek = 0 (bez záseku), napr. keď sa rovno zadá radius
   KOLH:   { D: '0', E: '0' },
   OBLH:   { D: '0', E: '0' },
@@ -4414,7 +4426,10 @@ function setCell(idx, key, value) {
   const el = document.querySelector(`[data-row="${idx}"][data-key="${key}"]`);
   if (el) {
     const isEmpty = !value || (key === 'pocKs' && +value <= 0);
-    el.classList.toggle('invalid', isEmpty && rows[idx]._committed);
+    const tvDef = TVAROVKY[rows[idx].kod];
+    const pDef = tvDef && tvDef.params ? tvDef.params[key] : null;
+    const povinne = key === 'pocKs' || !!(pDef && pDef.req);   // voliteľné polia, pozícia, poznámka, príruby sa nezafarbia
+    el.classList.toggle('invalid', povinne && isEmpty && rows[idx]._committed);
     // Pri prírubových dropdownoch prebuduj options (zobraz/skry "vymazať")
     if (key.startsWith('priruba_') && el.tagName === 'SELECT') {
       rebuildPrirubaSelect(el, value);
