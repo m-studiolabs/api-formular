@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Rozpis Potrubia – Zadávací formulár</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/exceljs/4.4.0/exceljs.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
 <style>
   :root {
     --steel: #002d6e;
@@ -243,7 +244,7 @@
   .autosave-status.err { color: #f5b041; }
 
   /* Bez vlastného posúvania – hlavička tabuľky sa tak môže pripnúť k oknu.
-     Ak je okno užšie ako tabuľka (~1430 px), do strany sa posúva celá stránka. */
+     Ak je okno užšie ako tabuľka (~1450 px), do strany sa posúva celá stránka. */
   .table-wrap { overflow: visible; }
 
   table {
@@ -445,6 +446,22 @@
   }
   .kod-input:focus { outline: none; border-color: var(--steel-light); box-shadow: 0 0 0 2px rgba(61,85,112,0.15); }
   .kod-input.invalid { border-color: var(--err); background: #fff5f5; }
+  /* Príloha voľnej položky (📎) – tlačidlo pod kódom VOLNA (stĺpec Kód je kvôli nemu o niečo širší) */
+  .priloha-btn {
+    display: block; width: 100%; margin-top: 4px; padding: 3px 5px;
+    border-radius: 4px; font-family: var(--font-ui); font-size: 11px; font-weight: 700; line-height: 1.35;
+    text-align: left; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; cursor: pointer;
+  }
+  .priloha-btn.chyba { color: #c0392b; background: #fff1ee; border: 1.5px dashed #c0392b; animation: prilohaPulz 1.6s ease-in-out infinite; }
+  .priloha-btn.chyba:hover { background: #ffe0da; }
+  .priloha-btn.ok { color: #1a6b35; background: #e9f7ee; border: 1.5px solid #2e9e5b; }
+  .priloha-btn.ok:hover { background: #d6f0df; }
+  @keyframes prilohaPulz {
+    0%, 100% { box-shadow: 0 0 0 0 rgba(192,57,43,0.45); }
+    50%      { box-shadow: 0 0 0 4px rgba(192,57,43,0); }
+  }
+  tbody tr.drag-file-over { outline: 2px dashed #2e9e5b; outline-offset: -2px; background: #eefaf2 !important; }
+  #prilohy-drop.nad { border-color: #2e9e5b !important; background: #eefaf2 !important; }
   .kod-dropdown {
     display: none;
     position: fixed;
@@ -601,6 +618,7 @@
       <button class="btn btn-secondary btn-icon" onclick="saveToFile()" title="Uložiť rozpracované dáta do súboru">💾</button>
       <button class="btn btn-secondary btn-icon" onclick="openFromFile()" title="Otvoriť uložený súbor so zákazkou">📂</button>
       <input type="file" id="file-open-input" accept=".json" style="display:none" onchange="loadFromFile(event)">
+      <input type="file" id="priloha-input" multiple style="display:none" onchange="prilohaVybrane(event)">
       <button class="btn btn-primary" onclick="exportExcel()">📤 Export zákazky</button>
     </div>
   </div>
@@ -671,7 +689,7 @@
           <tr>
             <th class="col-num" style="width:32px">#</th>
             <th style="width:112px">Pozícia</th>
-            <th style="width:70px">Kód</th>
+            <th style="width:92px">Kód</th>
             <th style="width:44px">ks</th>
             <th style="width:51px">A</th>
             <th style="width:51px">B</th>
@@ -937,6 +955,36 @@ const TVAROVKY = {
     },
     priruba: true,
   },
+  // Kruhová rúra ⌀A dĺžky B s hranatým nástavcom E × F dĺžky G.
+  // B sa predikuje ako E + 100 (PREDIKCIA – dá sa prepísať), lem / sigma C a D sú predvolene 0.
+  NASHK: {
+    label: 'NASHK – Nástavec hranatý na kruh',
+    params: {
+      A: { req: true,  type: 'dim', label: 'Priemer (mm)' },
+      B: { req: true,  type: 'len', label: 'Dĺžka (mm)' },              // predikovaná E + 100
+      C: { req: false, type: 'len', label: 'Lem / sigma C (mm)' },      // predvolene 0
+      D: { req: false, type: 'len', label: 'Lem / sigma D (mm)' },      // predvolene 0
+      E: { req: true,  type: 'dim', label: 'Šírka nástavca (mm)' },
+      F: { req: true,  type: 'dim', label: 'Výška nástavca (mm)' },
+      G: { req: true,  type: 'len', label: 'Dĺžka nástavca (mm)' },
+    },
+    priruba: true,
+  },
+  // Kruhový nástavec ⌀E na kruhovej rúre ⌀A dĺžky B – rovný (90°) alebo pod uhlom G (30–90°).
+  // B a F sa predikujú podľa E a G (PREDIKCIA – dajú sa prepísať), lem / sigma C a D sú predvolene 0.
+  NASKK: {
+    label: 'NASKK – Nástavec kruhový na kruh',
+    params: {
+      A: { req: true,  type: 'dim',   label: 'Priemer rúry (mm)' },
+      B: { req: true,  type: 'len',   label: 'Dĺžka rúry (mm)' },        // predikovaná podľa E a G
+      C: { req: false, type: 'len',   label: 'Lem / sigma C (mm)' },     // predvolene 0
+      D: { req: false, type: 'len',   label: 'Lem / sigma D (mm)' },     // predvolene 0
+      E: { req: true,  type: 'dim',   label: 'Priemer nástavca (mm)' },
+      F: { req: true,  type: 'len',   label: 'Dĺžka nástavca (mm)' },    // predikovaná podľa E a G
+      G: { req: true,  type: 'angle', label: 'Uhol nástavca (°)' },      // 30–90°, Tabom sa predvyplní 90
+    },
+    priruba: true,
+  },
   // ─── PRECHODY ────────────────────────────────────
   ODH1: {
     label: 'ODH1 – Odskok hranatý',
@@ -978,7 +1026,7 @@ const TVAROVKY = {
     label: 'ODK – Odskok kruhový',
     params: {
       A: { req: true, type: 'dim', label: 'Priemer (mm)' },
-      B: { req: true, type: 'len', label: 'Dĺžka (mm)' },
+      B: { req: true, type: 'len', label: 'Dĺžka (mm)' },      // predvyplní sa A + 100 (A < C: A + 101), min. 2 × C
       C: { req: true, type: 'dim', label: 'Offset (mm)' },
     },
     autoFill: {
@@ -1127,6 +1175,27 @@ const TVAROVKY = {
     },
     priruba: true,
   },
+  // Rozbočka hranatá – výška E je v CAMducte „Auto“, preto sa nezadáva.
+  // Polomery F, G = 150, uhly H, I = 90, veľkosti J–M = 0 – predvyplnia sa a dajú sa prepísať
+  // (iný polomer alebo uhol = ATYP, rovnako ako pri ROZH2).
+  ROZH6: {
+    label: 'ROZH6 – Rozbočka hranatá',
+    params: {
+      A: { req: true,  type: 'dim',   label: 'Spodná šírka (mm)' },          // min. polovica väčšej z C, D
+      B: { req: true,  type: 'dim',   label: 'Hĺbka (mm)' },
+      C: { req: true,  type: 'dim',   label: 'Pravá šírka (mm)' },
+      D: { req: true,  type: 'dim',   label: 'Ľavá šírka (mm)' },
+      F: { req: true,  type: 'len',   label: 'Pravý polomer (mm)' },         // min. 1, ak J alebo L > 0
+      G: { req: true,  type: 'len',   label: 'Ľavý polomer (mm)' },          // min. 1, ak K alebo M > 0
+      H: { req: true,  type: 'angle', label: 'Pravý uhol (°)' },
+      I: { req: true,  type: 'angle', label: 'Ľavý uhol (°)' },
+      J: { req: false, type: 'len',   label: 'Spodná pravá veľkosť (mm)' },
+      K: { req: false, type: 'len',   label: 'Spodná ľavá veľkosť (mm)' },
+      L: { req: false, type: 'len',   label: 'Pravá veľkosť (mm)' },
+      M: { req: false, type: 'len',   label: 'Ľavá veľkosť (mm)' },
+    },
+    priruba: true,
+  },
   ROZH7: {
     label: 'ROZH7 – Rozbočka hranatá nohavice',
     params: {
@@ -1184,40 +1253,92 @@ const TVAROVKY = {
     },
     priruba: true,
   },
+  // Rozbočka kruhová – rovnako ako NASKK: nástavec ⌀E na rúre ⌀A dĺžky B pod uhlom G (30–90°).
+  // B a F sa predikujú podľa E a G (PREDIKCIA – dajú sa prepísať), lem / sigma C a D sú predvolene 0.
   ROZK1: {
     label: 'ROZK1 – Rozbočka kruhová (T-čko)',
     params: {
-      A: { req: true,  type: 'dim',   label: 'Priemer 1 (mm)' },
-      B: { req: true,  type: 'len',   label: 'Dĺžka (mm)' },
-      E: { req: true,  type: 'dim',   label: 'Priemer 2 (mm)' },
-      G: { req: true,  type: 'angle', label: 'Uhol (°)' },
-    },
-    autoFill: {
-      C: () => 0,
-      D: () => 0,
-      F: (r) => {
-        const a = +r.A, g = +r.G;
-        return a > 630 ? (g === 45 ? 180 : 230) : (g === 45 ? 150 : 200);
-      },
-      I: () => 0,
-      J: () => 90,
-      K: () => 0,
+      A: { req: true,  type: 'dim',   label: 'Priemer rúry (mm)' },
+      B: { req: true,  type: 'len',   label: 'Dĺžka rúry (mm)' },        // predikovaná podľa E a G
+      C: { req: false, type: 'len',   label: 'Lem / sigma C (mm)' },     // predvolene 0
+      D: { req: false, type: 'len',   label: 'Lem / sigma D (mm)' },     // predvolene 0
+      E: { req: true,  type: 'dim',   label: 'Priemer nástavca (mm)' },
+      F: { req: true,  type: 'len',   label: 'Dĺžka nástavca (mm)' },    // predikovaná podľa E a G
+      G: { req: true,  type: 'angle', label: 'Uhol nástavca (°)' },      // 30–90°, Tabom sa predvyplní 90
     },
     priruba: true,
   },
+  // Rozbočka napojená do hlavnej vetvy ⌀D, ktorá je väčšia – odbočenia ⌀A sú menšie (náhrada ROZK + 2 × PRK).
+  // Polia podľa CAMductu; B, C, E, F, G, H majú predvolené hodnoty (dajú sa prepísať).
   ROZK2: {
     label: 'ROZK2 – Rozbočka kruhová 90°',
     params: {
-      A: { req: true,  type: 'dim',   label: 'Priemer 1 (mm)' },
-      E: { req: true,  type: 'dim',   label: 'Priemer 2 (mm)' },
-      G: { req: true,  type: 'angle', label: 'Uhol (°)' },     // predvyplnený 90, dá sa zmeniť
+      A: { req: true,  type: 'dim',   label: 'Priemer potrubia (mm)' },
+      B: { req: true,  type: 'len',   label: 'Ľavá veľkosť (mm)' },     // predvolene 50, min. 50
+      C: { req: true,  type: 'len',   label: 'Pravá veľkosť (mm)' },    // predvolene 50, min. 50
+      D: { req: true,  type: 'dim',   label: 'Priemer vetvy (mm)' },
+      E: { req: true,  type: 'len',   label: 'Dĺžka vetvy (mm)' },      // predvolene 120, pod 120 atyp
+      F: { req: true,  type: 'angle', label: 'Uhol F (°)' },            // predvolene 30
+      G: { req: true,  type: 'angle', label: 'Uhol G (°)' },            // predvolene 30
+      H: { req: true,  type: 'len',   label: 'Límec (mm)' },            // predvolene 50
+    },
+    priruba: true,
+  },
+  // Rozbočka kruhová obojstranná – ako ROZK1, ale s dvoma nástavcami (E, F, G a L, M, N).
+  // Druhý nástavec sa predvyplní podľa prvého (L = E, N = G); F, M a dĺžka rúry B sa predikujú
+  // (PREDIKCIA – všetko sa dá prepísať), B podľa horšieho (dlhšieho) z nástavcov.
+  ROZK5: {
+    label: 'ROZK5 – Rozbočka kruhová obojstranná',
+    params: {
+      A: { req: true,  type: 'dim',   label: 'Priemer rúry (mm)' },
+      B: { req: true,  type: 'len',   label: 'Dĺžka rúry (mm)' },          // podľa horšieho nástavca
+      C: { req: false, type: 'len',   label: 'Lem / sigma C (mm)' },       // predvolene 0
+      D: { req: false, type: 'len',   label: 'Lem / sigma D (mm)' },       // predvolene 0
+      E: { req: true,  type: 'dim',   label: 'Priemer nástavca 1 (mm)' },
+      F: { req: true,  type: 'len',   label: 'Dĺžka nástavca 1 (mm)' },    // predikovaná podľa E a G
+      G: { req: true,  type: 'angle', label: 'Uhol nástavca 1 (°)' },      // 30–90°, Tabom sa predvyplní 90
+      L: { req: true,  type: 'dim',   label: 'Priemer nástavca 2 (mm)' },  // predvyplní sa E
+      M: { req: true,  type: 'len',   label: 'Dĺžka nástavca 2 (mm)' },    // predikovaná podľa L a N
+      N: { req: true,  type: 'angle', label: 'Uhol nástavca 2 (°)' },      // predvyplní sa G
+    },
+    priruba: true,
+  },
+  // Rozbočka kruhová Y – zadá sa jeden priemer, všetky 3 konce sú rovnaké.
+  // B, C sa predvyplnia podľa priemeru (50 do ⌀315, 100 nad ⌀315 – PREDIKCIA), F, G = 50; všetko sa dá prepísať; E natvrdo 50.
+  ROZK8: {
+    label: 'ROZK8 – Rozbočka kruhová Y',
+    params: {
+      A: { req: true,  type: 'dim',   label: 'Priemer (mm)' },
+      B: { req: true,  type: 'len',   label: 'Vnútorná dĺžka (mm)' },     // 50 (do ⌀315) / 100 (nad ⌀315)
+      C: { req: true,  type: 'len',   label: 'Vonkajšia dĺžka (mm)' },    // 50 (do ⌀315) / 100 (nad ⌀315)
+      D: { req: true,  type: 'angle', label: 'Uhol (°)' },                // 30–60°
+      F: { req: true,  type: 'len',   label: 'Hodnota F (mm)' },          // predvolene 50, pod 50 atyp
+      G: { req: true,  type: 'len',   label: 'Hodnota G (mm)' },          // predvolene 50, pod 50 atyp
     },
     autoFill: {
-      C: () => 0,
-      D: () => 0,
-      F: (r) => 50 + (+r.E > 630 ? 80 : 50),
-      H: (r) => 50 + (+r.A > 630 ? 80 : 50),
-      B: (r) => r.E && r.A ? +r.E + 2 * (50 + (+r.A > 630 ? 80 : 50)) : '',
+      E: () => 50,
+    },
+    priruba: true,
+  },
+  // ─── VÝFUKOVÝ KUS KRUHOVÝ ────────────────────────
+  // Kruhová obdoba VYFH (v CAMducte: priemer vetvy, dĺžka, uhol, plech šírka / dĺžka, offsety, veľkosť).
+  // A kruhová rada; B dĺžka a C uhol 30–89° sa zadávajú; D, E sa dopočítajú, F, G, H = 0;
+  // do poznámky sa doplní „SITO“ (POZNAMKA_DEFAULTS)
+  VYFK: {
+    label: 'VYFK – Výfukový kus kruhový',
+    params: {
+      A: { req: true,  type: 'dim',   label: 'Priemer vetvy (mm)' },
+      B: { req: true,  type: 'len',   label: 'Dĺžka (mm)' },
+      C: { req: true,  type: 'angle', label: 'Uhol (°)' },
+    },
+    autoFill: {
+      // D (plech šírka): pri uhle od 45° = A × 1,5; pri uhle pod 45° (30–44°) = A × 2 + 50; zaokrúhlené na celé mm
+      D: (r) => (r.A && r.C) ? Math.round(+r.C >= 45 ? +r.A * 1.5 : +r.A * 2 + 50) : '',
+      // E (plech dĺžka) = A + 50
+      E: (r) => r.A ? +r.A + 50 : '',
+      F: () => 0,
+      G: () => 0,
+      H: () => 0,
     },
     priruba: true,
   },
@@ -1383,15 +1504,14 @@ const TVAROVKY = {
     },
     priruba: true,
   },
-  // ── [VYRADENÉ: RKHR1] na obnovenie odkomentuj všetky miesta s týmto označením
-//   'RKHR1': {
-//     label: 'RKHR1 – Regulačná klapka hranatá ručná s plyn. ovládaním',
-//     params: {
-//       A: { req: true, type: 'dim', label: 'Šírka (mm)' },
-//       B: { req: true, type: 'dim', label: 'Výška (mm)' },
-//     },
-//     priruba: true,
-//   },
+  'RKHR1': {
+    label: 'RKHR1 – Regulačná klapka hranatá ručná s plyn. ovládaním',
+    params: {
+      A: { req: true, type: 'dim', label: 'Šírka (mm)' },
+      B: { req: true, type: 'dim', label: 'Výška (mm)' },
+    },
+    priruba: true,
+  },
   'PZALS': {
     label: 'PZALS – Žalúzia hliníková so sitom',
     params: {
@@ -1580,11 +1700,11 @@ const TVAROVKY = {
 //     priruba: true,
 //   },
   'THK': {
-    label: 'THK – Tlmič hluku kruhový (dĺžka 300)',
+    label: 'THK – Tlmič hluku kruhový',
     params: {
       A: { req: true, type: 'dim', label: 'Priemer (mm)' },
+      B: { req: true, type: 'len', label: 'Dĺžka (mm)' },    // štandard 300, 600, 900; max. 1500 (do v269 pevná 300)
     },
-    autoFill: { B: () => 300 },   // dĺžka pevná 300 mm (predtým sa zadávala)
     priruba: true,
   },
   'ANEM-H O': {
@@ -1668,6 +1788,7 @@ const PRIRUBA_DEFAULTS = {
 // Pri zmene na iný kód sa automaticky doplnená poznámka zase odstráni – len ak ju používateľ nezmenil.
 const POZNAMKA_DEFAULTS = {
   VYFH: 'SITO',
+  VYFK: 'SITO',
 };
 
 function aplikujPoznamku(row, staryKod, novyKod) {
@@ -2229,6 +2350,63 @@ const KONTROLA = {
     }
   },
 
+  // ─── NASHK ───────────────────────────────────────
+  // Priemer A = kruhová rada (s ⌀80); šírka E a výška F nástavca = hranatá rada; dĺžka nástavca G = 150 / 200 / 300.
+  // Dĺžka B (predikovaná E + 100) a lem / sigma C, D sa na štandard nekontrolujú.
+  // Nedá sa vyrobiť: nástavec vyšší ako priemer rúry (F > A), rúra kratšia ako nástavec (B < E).
+  NASHK: {
+    check(r) {
+      if (!r.A && !r.B && !r.E && !r.F && !r.G) return null;
+      const missing = [];
+      if (!r.A) missing.push('A');
+      if (!r.B) missing.push('B');
+      if (!r.E) missing.push('E');
+      if (!r.F) missing.push('F');
+      if (!r.G) missing.push('G');
+      if (missing.length > 0) return { status: 'CHYBA', text: `CHYBA – ZADAJTE ${missing.join(', ')}` };
+
+      const A = +r.A, B = +r.B, E = +r.E, F = +r.F, G = +r.G;
+      if (F > A) return { status: 'CHYBA', text: `NIE JE MOŽNÉ VYROBIŤ: VÝŠKA F MUSÍ BYŤ MAX. PRIEMER A (${A})` };
+      if (B < E) return { status: 'CHYBA', text: `NIE JE MOŽNÉ VYROBIŤ: DĹŽKA B MUSÍ BYŤ MIN. ŠÍRKA E (${E})` };
+
+      const STD_A  = [80,100,125,160,200,224,250,280,315,355,400,450,500,560,630,710,800,900,1000,1120,1250,1400,1600,1800];
+      const STD_EF = [100,125,150,160,200,225,250,300,315,355,400,450,500,560,600,630,650,700,710,750,800,850,900,950,1000,1050,1100,1120,1150,1200,1250,1300,1350,1400,1450,1500,1550,1600,1650,1700,1750,1800];
+      const STD_G  = [150,200,300];
+      const reasons = [];
+      if (!STD_A.includes(A))  reasons.push('A');
+      if (!STD_EF.includes(E)) reasons.push('E');
+      if (!STD_EF.includes(F)) reasons.push('F');
+      if (!STD_G.includes(G))  reasons.push('G');
+      if (reasons.length > 0) return { status: 'ATYP', text: `ATYP – PARAMETER ${reasons.join(', ')}` };
+      return { status: 'OK', text: 'OK – ŠTANDARD' };
+    }
+  },
+
+  // ─── NASKK ───────────────────────────────────────
+  // Priemer rúry A a priemer nástavca E = kruhová rada (s ⌀80); uhol G 30–90° (každý uhol v rozsahu je štandard).
+  // Dĺžky B, F (predikované podľa E a G) a lem / sigma C, D sa na štandard nekontrolujú.
+  // Nedá sa vyrobiť: uhol mimo 30–90°, nástavec väčší ako rúra (E > A), rúra kratšia ako nástavec (B < E).
+  NASKK: {
+    check(r) {
+      if (!r.A && !r.B && !r.E && !r.F && !r.G) return null;
+      const missing = [];
+      ['A', 'B', 'E', 'F', 'G'].forEach(c => { if (!r[c]) missing.push(c); });
+      if (missing.length > 0) return { status: 'CHYBA', text: `CHYBA – ZADAJTE ${missing.join(', ')}` };
+
+      const A = +r.A, B = +r.B, E = +r.E, G = +r.G;
+      if (G < 30 || G > 90) return { status: 'CHYBA', text: 'NIE JE MOŽNÉ VYROBIŤ: UHOL MUSÍ BYŤ 30–90°' };
+      if (E > A) return { status: 'CHYBA', text: `NIE JE MOŽNÉ VYROBIŤ: PRIEMER E MUSÍ BYŤ MAX. PRIEMER A (${A})` };
+      if (B < E) return { status: 'CHYBA', text: `NIE JE MOŽNÉ VYROBIŤ: DĹŽKA B MUSÍ BYŤ MIN. PRIEMER E (${E})` };
+
+      const STD = [80,100,125,160,200,224,250,280,315,355,400,450,500,560,630,710,800,900,1000,1120,1250,1400,1600,1800];
+      const reasons = [];
+      if (!STD.includes(A)) reasons.push('A');
+      if (!STD.includes(E)) reasons.push('E');
+      if (reasons.length > 0) return { status: 'ATYP', text: `ATYP – PARAMETER ${reasons.join(', ')}` };
+      return { status: 'OK', text: 'OK – ŠTANDARD' };
+    }
+  },
+
   // ─── ODH1 / ODH2 ─────────────────────────────────────────
   ODH1: {
     check(r) {
@@ -2275,7 +2453,7 @@ const KONTROLA = {
   },
 
   // ─── ODK ──────────────────────────────────────────
-  // Priemer A = rada ako spiro (RUS); offset C min. 10; dĺžka B min. 2 × C; D–G natvrdo 50
+  // Priemer A = rada ako spiro (RUS); offset C min. 10; dĺžka B min. 2 × C (predvyplní sa podľa odkDlzka); D–G natvrdo 50
   ODK: {
     check(r) {
       if (!r.A && !r.B && !r.C) return null;
@@ -2478,6 +2656,42 @@ const KONTROLA = {
     }
   },
 
+  // ─── ROZH6 ────────────────────────────────────────
+  // Rozmery A–D = hranatá rada (ako RUH), inak ATYP, nad 1800 nadrozmerný. Spodná šírka A musí byť
+  // min. polovica väčšej zo šírok C, D. Polomer F musí byť min. 1, ak je J alebo L > 0 (G pri K alebo M).
+  // Polomer F, G iný ako 150 a uhol H, I iný ako 90 = ATYP (ako ROZH2); výška E je „Auto“ (nezadáva sa).
+  ROZH6: {
+    check(r) {
+      if (!['A','B','C','D','F','G','H','I','J','K','L','M'].some(c => r[c])) return null;
+      const missing = [];
+      ['A', 'B', 'C', 'D', 'F', 'G', 'H', 'I'].forEach(c => { if (!r[c]) missing.push(c); });
+      if (missing.length > 0) return { status: 'CHYBA', text: `CHYBA – ZADAJTE ${missing.join(', ')}` };
+
+      const A = +r.A, B = +r.B, C = +r.C, D = +r.D, F = +r.F, G = +r.G, H = +r.H, I = +r.I;
+      const J = +r.J || 0, K = +r.K || 0, L = +r.L || 0, M = +r.M || 0;
+      const minA = Math.ceil(Math.max(C, D) / 2);
+      if (A < minA) return { status: 'CHYBA', text: `NIE JE MOŽNÉ VYROBIŤ: ŠÍRKA A MUSÍ BYŤ MIN. ${D > C ? 'D' : 'C'}/2 (${minA})` };
+      if ((J > 0 || L > 0) && F < 1) return { status: 'CHYBA', text: 'NIE JE MOŽNÉ VYROBIŤ: POLOMER F MUSÍ BYŤ MIN. 1 (J ALEBO L > 0)' };
+      if ((K > 0 || M > 0) && G < 1) return { status: 'CHYBA', text: 'NIE JE MOŽNÉ VYROBIŤ: POLOMER G MUSÍ BYŤ MIN. 1 (K ALEBO M > 0)' };
+
+      const STD_ABCD = [100,125,150,160,200,225,250,300,315,355,400,450,500,560,600,630,650,700,710,750,800,850,900,950,1000,1050,1100,1120,1150,1200,1250,1300,1350,1400,1450,1500,1550,1600,1650,1700,1750,1800];
+      const kat = (v) => !STD_ABCD.includes(v) ? (v > 1800 ? 2 : 1) : 0;
+      const kA = kat(A), kB = kat(B), kC = kat(C), kD = kat(D);
+      if (kA === 2 || kB === 2 || kC === 2 || kD === 2) return { status: 'ATYP', text: 'ATYP – NADROZMERNÝ PRVOK' };
+      const reasons = [];
+      if (kA === 1) reasons.push('A');
+      if (kB === 1) reasons.push('B');
+      if (kC === 1) reasons.push('C');
+      if (kD === 1) reasons.push('D');
+      if (F !== 150) reasons.push('F');
+      if (G !== 150) reasons.push('G');
+      if (H !== 90)  reasons.push('H');
+      if (I !== 90)  reasons.push('I');
+      if (reasons.length > 0) return { status: 'ATYP', text: `ATYP – PARAMETER ${reasons.join(', ')}` };
+      return { status: 'OK', text: 'OK – ŠTANDARD' };
+    }
+  },
+
   // ─── ROZH7 ────────────────────────────────────────
   ROZH7: {
     check(r) {
@@ -2566,66 +2780,134 @@ const KONTROLA = {
   },
 
   // ─── ROZK1 ────────────────────────────────────────
+  // Rovnako ako NASKK: priemery A, E = kruhová rada (s ⌀80), uhol G 30–90° (každý uhol v rozsahu je štandard);
+  // nedá sa vyrobiť: uhol mimo 30–90°, E > A, B < E. Nad ⌀1800 nadrozmerný prvok (ako doteraz).
   ROZK1: {
     check(r) {
-      if (!r.A && !r.E) return null;
+      if (!r.A && !r.B && !r.E && !r.F && !r.G) return null;
       const missing = [];
-      if (!r.A) missing.push('A');
-      if (!r.B) missing.push('B');      // dĺžka – povinná
-      if (!r.E) missing.push('E');
-      if (!r.G) missing.push('G');
+      ['A', 'B', 'E', 'F', 'G'].forEach(c => { if (!r[c]) missing.push(c); });
       if (missing.length > 0) return { status: 'CHYBA', text: `CHYBA – ZADAJTE ${missing.join(', ')}` };
 
-      const A = +r.A, E = +r.E, G = +r.G;
+      const A = +r.A, B = +r.B, E = +r.E, G = +r.G;
+      if (G < 30 || G > 90) return { status: 'CHYBA', text: 'NIE JE MOŽNÉ VYROBIŤ: UHOL MUSÍ BYŤ 30–90°' };
+      if (E > A) return { status: 'CHYBA', text: `NIE JE MOŽNÉ VYROBIŤ: PRIEMER E MUSÍ BYŤ MAX. PRIEMER A (${A})` };
+      if (B < E) return { status: 'CHYBA', text: `NIE JE MOŽNÉ VYROBIŤ: DĹŽKA B MUSÍ BYŤ MIN. PRIEMER E (${E})` };
+
       const STD_AE = [80,100,125,160,200,224,250,280,315,355,400,450,500,560,630,710,800,900,1000,1120,1250,1400,1600,1800];
-
-      // Špeciálna podmienka – E musí byť ≤ A
-      if (E > A) return { status: 'CHYBA', text: 'NIE JE MOŽNÉ VYROBIŤ: ZADAJTE A>=E' };
-
       const kA = !STD_AE.includes(A) ? (A > 1800 ? 2 : 1) : 0;
       const kE = !STD_AE.includes(E) ? (E > 1800 ? 2 : 1) : 0;
-
       if (kA === 2 || kE === 2) return { status: 'ATYP', text: 'ATYP – NADROZMERNÝ PRVOK' };
       const reasons = [];
       if (kA === 1) reasons.push('A');
       if (kE === 1) reasons.push('E');
-      if (G !== 45) reasons.push('G');
       if (reasons.length > 0) return { status: 'ATYP', text: `ATYP – PARAMETER ${reasons.join(', ')}` };
       return { status: 'OK', text: 'OK – ŠTANDARD' };
     }
   },
 
   // ─── ROZK2 ────────────────────────────────────────
-  // Priemery A, E = rada ako spiro; E ≤ A; uhol G 10–90° (štandard len 90°, inak ATYP)
+  // Priemer potrubia A a priemer vetvy D = kruhová rada (s ⌀80), inak ATYP (nad 1800 nadrozmerný);
+  // ľavá B a pravá C veľkosť min. 50 (menej sa nedá vyrobiť); dĺžka vetvy E pod 120 = ATYP;
+  // uhly F, G a límec H sa nekontrolujú (predvolené 30 / 30 / 50)
   ROZK2: {
     check(r) {
-      if (!r.A && !r.E) return null;
+      if (!r.A && !r.D) return null;
       const missing = [];
-      if (!r.A) missing.push('A');
-      if (!r.E) missing.push('E');
-      if (!r.G) missing.push('G');
+      ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H'].forEach(c => { if (!r[c]) missing.push(c); });
       if (missing.length > 0) return { status: 'CHYBA', text: `CHYBA – ZADAJTE ${missing.join(', ')}` };
 
-      const A = +r.A, E = +r.E, G = +r.G;
-      const STD_AE = [80,100,125,160,200,224,250,280,315,355,400,450,500,560,630,710,800,900,1000,1120,1250,1400,1600,1800];
+      const A = +r.A, B = +r.B, C = +r.C, D = +r.D, E = +r.E;
+      const male = [['B', B], ['C', C]].filter(([, v]) => v < 50).map(([c]) => c);
+      if (male.length) return { status: 'CHYBA', text: `NIE JE MOŽNÉ VYROBIŤ: VEĽKOSŤ ${male.join(', ')} MUSÍ BYŤ MIN. 50` };
 
-      // Uhol mimo vyrobiteľného rozsahu (ako pri OBLK)
-      if (G < 10 || G > 90) {
-        return { status: 'CHYBA', text: 'NIE JE MOŽNÉ VYROBIŤ: UHOL MUSÍ BYŤ 10–90°' };
-      }
+      const STD_AD = [80,100,125,160,200,224,250,280,315,355,400,450,500,560,630,710,800,900,1000,1120,1250,1400,1600,1800];
+      const kA = !STD_AD.includes(A) ? (A > 1800 ? 2 : 1) : 0;
+      const kD = !STD_AD.includes(D) ? (D > 1800 ? 2 : 1) : 0;
+      if (kA === 2 || kD === 2) return { status: 'ATYP', text: 'ATYP – NADROZMERNÝ PRVOK' };
+      const reasons = [];
+      if (kA === 1) reasons.push('A');
+      if (kD === 1) reasons.push('D');
+      if (E < 120) reasons.push('E');
+      if (reasons.length > 0) return { status: 'ATYP', text: `ATYP – PARAMETER ${reasons.join(', ')}` };
+      return { status: 'OK', text: 'OK – ŠTANDARD' };
+    }
+  },
 
-      // Špeciálna podmienka – E musí byť ≤ A
-      if (E > A) return { status: 'CHYBA', text: 'NIE JE MOŽNÉ VYROBIŤ: ZADAJTE A>=E' };
+  // ─── ROZK5 ────────────────────────────────────────
+  // Ako ROZK1, ale s dvoma nástavcami: priemery A, E, L = kruhová rada (s ⌀80), uhly G, N 30–90° (v rozsahu vždy OK);
+  // nedá sa vyrobiť: uhol mimo 30–90°, nástavec väčší ako rúra, rúra kratšia ako väčší nástavec. Nad ⌀1800 nadrozmerný.
+  ROZK5: {
+    check(r) {
+      if (!r.A && !r.B && !r.E && !r.F && !r.G && !r.L && !r.M && !r.N) return null;
+      const missing = [];
+      ['A', 'B', 'E', 'F', 'G', 'L', 'M', 'N'].forEach(c => { if (!r[c]) missing.push(c); });
+      if (missing.length > 0) return { status: 'CHYBA', text: `CHYBA – ZADAJTE ${missing.join(', ')}` };
 
-      const kA = !STD_AE.includes(A) ? (A > 1800 ? 2 : 1) : 0;
-      const kE = !STD_AE.includes(E) ? (E > 1800 ? 2 : 1) : 0;
+      const A = +r.A, B = +r.B, E = +r.E, G = +r.G, L = +r.L, N = +r.N;
+      const zleUhly = [['G', G], ['N', N]].filter(([, u]) => u < 30 || u > 90).map(([c]) => c);
+      if (zleUhly.length) return { status: 'CHYBA', text: `NIE JE MOŽNÉ VYROBIŤ: UHOL ${zleUhly.join(', ')} MUSÍ BYŤ 30–90°` };
+      const vacsie = [['E', E], ['L', L]].filter(([, d]) => d > A).map(([c]) => c);
+      if (vacsie.length) return { status: 'CHYBA', text: `NIE JE MOŽNÉ VYROBIŤ: PRIEMER ${vacsie.join(', ')} MUSÍ BYŤ MAX. PRIEMER A (${A})` };
+      const maxD = Math.max(E, L);
+      if (B < maxD) return { status: 'CHYBA', text: `NIE JE MOŽNÉ VYROBIŤ: DĹŽKA B MUSÍ BYŤ MIN. PRIEMER ${E >= L ? 'E' : 'L'} (${maxD})` };
 
-      if (kA === 2 || kE === 2) return { status: 'ATYP', text: 'ATYP – NADROZMERNÝ PRVOK' };
+      const STD = [80,100,125,160,200,224,250,280,315,355,400,450,500,560,630,710,800,900,1000,1120,1250,1400,1600,1800];
+      const k = (v) => !STD.includes(v) ? (v > 1800 ? 2 : 1) : 0;
+      const kA = k(A), kE = k(E), kL = k(L);
+      if (kA === 2 || kE === 2 || kL === 2) return { status: 'ATYP', text: 'ATYP – NADROZMERNÝ PRVOK' };
       const reasons = [];
       if (kA === 1) reasons.push('A');
       if (kE === 1) reasons.push('E');
-      if (G !== 90) reasons.push('G');
+      if (kL === 1) reasons.push('L');
       if (reasons.length > 0) return { status: 'ATYP', text: `ATYP – PARAMETER ${reasons.join(', ')}` };
+      return { status: 'OK', text: 'OK – ŠTANDARD' };
+    }
+  },
+
+  // ─── ROZK8 ────────────────────────────────────────
+  // Priemer A = kruhová rada (s ⌀80), nad 1800 nadrozmerný; uhol D 30–60° (mimo sa nedá vyrobiť);
+  // B, C pod 50 (do ⌀315) / pod 100 (nad ⌀315) = ATYP; F, G pod 50 = ATYP; E je natvrdo 50
+  ROZK8: {
+    check(r) {
+      if (!r.A && !r.B && !r.C && !r.D && !r.F && !r.G) return null;
+      const missing = [];
+      ['A', 'B', 'C', 'D', 'F', 'G'].forEach(c => { if (!r[c]) missing.push(c); });
+      if (missing.length > 0) return { status: 'CHYBA', text: `CHYBA – ZADAJTE ${missing.join(', ')}` };
+
+      const A = +r.A, B = +r.B, C = +r.C, D = +r.D, F = +r.F, G = +r.G;
+      if (D < 30 || D > 60) return { status: 'CHYBA', text: 'NIE JE MOŽNÉ VYROBIŤ: UHOL MUSÍ BYŤ 30–60°' };
+
+      const STD_A = [80,100,125,160,200,224,250,280,315,355,400,450,500,560,630,710,800,900,1000,1120,1250,1400,1600,1800];
+      const kA = !STD_A.includes(A) ? (A > 1800 ? 2 : 1) : 0;
+      if (kA === 2) return { status: 'ATYP', text: 'ATYP – NADROZMERNÝ PRVOK' };
+      const minBC = +rozk8DlzkaBC(A);
+      const reasons = [];
+      if (kA === 1) reasons.push('A');
+      if (B < minBC) reasons.push('B');
+      if (C < minBC) reasons.push('C');
+      if (F < 50) reasons.push('F');
+      if (G < 50) reasons.push('G');
+      if (reasons.length > 0) return { status: 'ATYP', text: `ATYP – PARAMETER ${reasons.join(', ')}` };
+      return { status: 'OK', text: 'OK – ŠTANDARD' };
+    }
+  },
+
+  // ─── VYFK ─────────────────────────────────────────
+  // Priemer vetvy A = kruhová rada (s ⌀80); dĺžka B ľubovoľná nad 0; uhol C 30–89° (v rozsahu vždy štandard)
+  VYFK: {
+    check(r) {
+      if (!r.A && !r.B && !r.C) return null;
+      const missing = [];
+      if (!r.A) missing.push('A');
+      if (!(+r.B > 0)) missing.push('B');
+      if (!r.C) missing.push('C');
+      if (missing.length > 0) return { status: 'CHYBA', text: `CHYBA – ZADAJTE ${missing.join(', ')}` };
+
+      const A = +r.A, C = +r.C;
+      if (C < 30 || C > 89) return { status: 'CHYBA', text: 'NIE JE MOŽNÉ VYROBIŤ: UHOL MUSÍ BYŤ 30–89°' };
+      const STD_A = [80,100,125,160,200,224,250,280,315,355,400,450,500,560,630,710,800,900,1000,1120,1250,1400,1600,1800];
+      if (!STD_A.includes(A)) return { status: 'ATYP', text: 'ATYP – PARAMETER A' };
       return { status: 'OK', text: 'OK – ŠTANDARD' };
     }
   },
@@ -2756,9 +3038,10 @@ const KONTROLA = {
   ROH30: { check(r) { return { status: 'OK', text: 'OK – ŠTANDARD' }; } },
 
   // ─── VOLNA ────────────────────────────────────────
-  // Voľná položka – bez kontroly rozmerov, vždy atyp
+  // Voľná položka – bez kontroly rozmerov, vždy atyp; musí mať prílohu (náčrt / výkres, tlačidlo 📎)
   VOLNA: {
     check(r) {
+      if (!platnePrilohy(r).length) return { status: 'CHYBA', text: 'CHYBA – PRILOŽTE PRÍLOHU 📎' };
       return { status: 'ATYP', text: 'ATYP – VOĽNÁ POLOŽKA' };
     }
   },
@@ -2820,24 +3103,23 @@ const KONTROLA = {
       return { status: 'OK', text: 'OK – ŠTANDARD' };
     }
   },
-  // ── [VYRADENÉ: RKHR1] na obnovenie odkomentuj všetky miesta s týmto označením
-//   'RKHR1': {
-//     check(r) {
-//       if (!r.A && !r.B) return null;
-//       const missing = [];
-//       if (!r.A) missing.push('A');
-//       if (!r.B) missing.push('B');
-//       if (missing.length > 0) return { status: 'CHYBA', text: `CHYBA – ZADAJTE ${missing.join(', ')}` };
+  'RKHR1': {
+    check(r) {
+      if (!r.A && !r.B) return null;
+      const missing = [];
+      if (!r.A) missing.push('A');
+      if (!r.B) missing.push('B');
+      if (missing.length > 0) return { status: 'CHYBA', text: `CHYBA – ZADAJTE ${missing.join(', ')}` };
 
-//       const A = +r.A, B = +r.B;
-//       const STD = [100,125,150,160,200,225,250,300,315,355,400,450,500,560,600,630,650,700,710,750,800,850,900,950,1000,1050,1100,1120,1150,1200,1250,1300,1350,1400,1450,1500,1550,1600,1650,1700,1750,1800];
-//       const reasons = [];
-//       if (!STD.includes(A)) reasons.push('A');
-//       if (!STD.includes(B)) reasons.push('B');
-//       if (reasons.length > 0) return { status: 'ATYP', text: `ATYP – PARAMETER ${reasons.join(', ')}` };
-//       return { status: 'OK', text: 'OK – ŠTANDARD' };
-//     }
-//   },
+      const A = +r.A, B = +r.B;
+      const STD = [200,250,315,400,500,630,710,800,900,1000,1250,1400];   // rada klapiek (ako RKHS, RKHR)
+      const reasons = [];
+      if (!STD.includes(A)) reasons.push('A');
+      if (!STD.includes(B)) reasons.push('B');
+      if (reasons.length > 0) return { status: 'ATYP', text: `ATYP – PARAMETER ${reasons.join(', ')}` };
+      return { status: 'OK', text: 'OK – ŠTANDARD' };
+    }
+  },
 
   // ─── PZALS / PZZNS ──────────────────────
   // Vlastná rada žalúzií: šírka A 200–1000, výška B 200–1800 (len hodnoty z rady), inak atyp
@@ -3055,14 +3337,25 @@ const KONTROLA = {
   // 'TCVH200N': { check(r) { return checkTlmicovaVlozka(r); } },   // [VYRADENÉ: TCVH200N]
 
   // ─── THK ─────────────────────────────────────────
-  // Priemer ako RUS, dĺžka B je pevná 300 mm
-  // (predtým sa B zadávala a štandard bol 600 alebo 900)
+  // Priemer A = kruhová rada (inak ATYP); dĺžka B: štandard 300, 600, 900, iná ATYP,
+  // max. 1500 – dlhší tlmič sa nedá vyrobiť
   'THK': {
     check(r) {
-      if (!r.A) return null;
-      const A = +r.A;
+      if (!r.A && !r.B) return null;
+      const missing = [];
+      if (!r.A) missing.push('A');
+      if (!(+r.B > 0)) missing.push('B');
+      if (missing.length > 0) return { status: 'CHYBA', text: `CHYBA – ZADAJTE ${missing.join(', ')}` };
+
+      const A = +r.A, B = +r.B;
       const STD_A = [80,100,125,160,200,224,250,280,315,355,400,450,500,560,630,710,800,900,1000,1120,1250,1400,1600,1800];
-      if (!STD_A.includes(A)) return { status: 'ATYP', text: 'ATYP – PARAMETER A' };
+      const STD_B = [300,600,900];
+      if (B > 1500) return { status: 'CHYBA', text: 'NIE JE MOŽNÉ VYROBIŤ: MAX DĹŽKA 1500' };
+
+      const reasons = [];
+      if (!STD_A.includes(A)) reasons.push('A');
+      if (!STD_B.includes(B)) reasons.push('B');
+      if (reasons.length > 0) return { status: 'ATYP', text: `ATYP – PARAMETER ${reasons.join(', ')}` };
       return { status: 'OK', text: 'OK – ŠTANDARD' };
     }
   },
@@ -3317,7 +3610,7 @@ function render() {
         onfocus="kodOpen(this,${idx})"
         onblur="kodBlur(this,${idx})">
       <div class="kod-dropdown" id="kod-dd-${idx}"></div>
-    </div></td>`;
+    </div>${row.kod === 'VOLNA' ? prilohaTlacidloHTML(row, idx) : ''}</td>`;
 
     // Počet ks
     const tiKs = tiCounter++;
@@ -3501,13 +3794,13 @@ const KodSorter = {
     OBLUK_H:     ['OBLH', /* 'OBLHPR90', [VYRADENÉ: OBLHPR90] */ 'OBLHPR', 'KOLH', /* 'KOLHPR90', [VYRADENÉ: KOLHPR90] */ 'KOLHPR'],
     OBLUK_K:     [/* 'OBLK90', [VYRADENÉ: OBLK90] */ /* 'OBLK45', [VYRADENÉ: OBLK45] */ 'OBLK', 'ODK'],
     NASTH:       ['NASH', 'NASHN'],
-    NASK:       ['NASK'],
+    NASK:       ['NASK', 'NASHK', 'NASKK'],   // nástavec kruhový, hranatý na kruh, kruhový na kruh
     PRECHOD_HH:  ['PRH', /* 'PRH1K', [VYRADENÉ: PRH1K] */ /* 'PRH1S', [VYRADENÉ: PRH1S] */ ],
     PRECHOD_HK:  ['PRHK', /* 'PRHK1S', [VYRADENÉ: PRHK1S] */ ],
     PRECHOD_KH:  ['PRKS', 'PRK2'],
     ODSKOK:      ['ODH1', 'ODH2'],
-    ROZH:        ['ROZH2', 'ROZH7', 'ROZH10', 'VYFH'],
-    ROZK:        ['ROZK1', 'ROZK2'],
+    ROZH:        ['ROZH2', 'ROZH6', 'ROZH7', 'ROZH10', 'VYFH'],
+    ROZK:        ['ROZK1', 'ROZK2', 'ROZK5', 'ROZK8', 'VYFK'],
     SPOJH:       ['ZSLH', 'ZSLHP'],
     SPOJK:       ['ZSLK', 'ZSLKN', 'SPOK', 'SPOKV'],
   },
@@ -3593,7 +3886,7 @@ const KodSorter = {
   // ── Technologické položky ────────────────────────
   // Používajú sa zriedka – v zozname sú vždy na konci,
   // nikdy sa neponúkajú dopredu bez ohľadu na predchádzajúci prvok.
-  TECH: ['RKKS', 'RKKR', 'RKHS', 'RKHR', /* 'RKHR1', [VYRADENÉ: RKHR1] */ 'PZALS', 'PZZNS', 'KSK', 'KMK', 'CAGIN', 'CAGIP', 'VHKN', 'VHKP', 'VHH', 'TVH', 'TVK', 'TCVH', 'TCVHN', /* 'TCVH50', [VYRADENÉ: TCVH50] */ /* 'TCVH50N', [VYRADENÉ: TCVH50N] */ /* 'TCVH100', [VYRADENÉ: TCVH100] */ /* 'TCVH100N', [VYRADENÉ: TCVH100N] */ /* 'TCVH150', [VYRADENÉ: TCVH150] */ /* 'TCVH150N', [VYRADENÉ: TCVH150N] */ /* 'TCVH200', [VYRADENÉ: TCVH200] */ /* 'TCVH200N', [VYRADENÉ: TCVH200N] */ 'THK', 'ANEM-H O', 'ANEM-H P', 'ANEM-V O', 'ANEM-V P', 'KMHP', 'KMHR', /* 'KMHS', [VYRADENÉ: KMHS] */ ],
+  TECH: ['RKKS', 'RKKR', 'RKHS', 'RKHR', 'RKHR1', 'PZALS', 'PZZNS', 'KSK', 'KMK', 'CAGIN', 'CAGIP', 'VHKN', 'VHKP', 'VHH', 'TVH', 'TVK', 'TCVH', 'TCVHN', /* 'TCVH50', [VYRADENÉ: TCVH50] */ /* 'TCVH50N', [VYRADENÉ: TCVH50N] */ /* 'TCVH100', [VYRADENÉ: TCVH100] */ /* 'TCVH100N', [VYRADENÉ: TCVH100N] */ /* 'TCVH150', [VYRADENÉ: TCVH150] */ /* 'TCVH150N', [VYRADENÉ: TCVH150N] */ /* 'TCVH200', [VYRADENÉ: TCVH200] */ /* 'TCVH200N', [VYRADENÉ: TCVH200N] */ 'THK', 'ANEM-H O', 'ANEM-H P', 'ANEM-V O', 'ANEM-V P', 'KMHP', 'KMHR', /* 'KMHS', [VYRADENÉ: KMHS] */ ],
 
   isTech(kod) { return this.TECH.includes(kod); },
 
@@ -3793,8 +4086,10 @@ document.addEventListener('click', (e) => {
     document.querySelectorAll('.kod-dropdown').forEach(d => d.classList.remove('open'));
   }
   // Commit row keď kliknem mimo riadku
-  const clickedCell = e.target.closest('[data-row]');
-  const clickedRowIdx = clickedCell ? parseInt(clickedCell.getAttribute('data-row')) : -1;
+  const clickedCell = e.target.closest('[data-row], [data-priloha-row]');
+  const clickedRowIdx = clickedCell
+    ? parseInt(clickedCell.hasAttribute('data-row') ? clickedCell.getAttribute('data-row') : clickedCell.getAttribute('data-priloha-row'))
+    : -1;
   rows.forEach((row, idx) => {
     if (!row._committed && idx !== clickedRowIdx) {
       // Commit len ak riadok má aspoň kód
@@ -3835,7 +4130,7 @@ function handleKey(event, rowIdx, key) {
     // Najprv zapíš aktuálnu hodnotu z inputu do modelu (onchange ešte nemusel zbehnúť)
     if (el && el.getAttribute('data-key')) {
       const curKey = el.getAttribute('data-key');
-      rows[rowIdx][curKey] = el.value;
+      zapisHodnotu(rowIdx, curKey, el.value);   // aj s prepočtom predikovaných polí (napr. NASHK B = E + 100)
     }
 
     // Commit aktuálny riadok
@@ -3954,7 +4249,7 @@ function revealDimSuggestion(rowIdx, key, el) {
   const val = (typeof s.val === 'function') ? String(s.val(row)) : s.val;
   // Návrh bez hodnoty (napr. z načítaného súboru, kde sa funkcia neuloží) – zahoď ho
   if (val === undefined || val === null) { row._dimSuggestions.splice(si, 1); return; }
-  row[key] = val;
+  zapisHodnotu(rowIdx, key, val);   // napr. šírka nástavca E z predchádzajúceho riadku → B = E + 100
   row._dimSuggestions.splice(si, 1);
   obnovAutoPolia(rowIdx);   // predvyplnená hodnota sa hneď prejaví aj v dopočítaných poliach
   if (el && el.tagName === 'INPUT') {
@@ -4019,6 +4314,8 @@ const DIM_PARAMS = {
   NASH:     ['A','B'],
   NASHN:    ['A','B'],
   NASK:    ['A'],
+  NASHK:   ['A','E','F'],
+  NASKK:   ['A','E'],
   ODH1:     ['A','B'],
   ODH2:     ['A','B'],
   ODK:      ['A'],
@@ -4032,11 +4329,15 @@ const DIM_PARAMS = {
   PRKS:     ['A','B'],
   PRK2:     ['A','B'],
   ROZH2:    ['A','B','C','D'],
+  ROZH6:    ['A','B','C','D'],
   ROZH7:    ['A','B','C','D'],
   ROZH10:   ['A','B','D','E'],
   VYFH:     ['A','B'],
   ROZK1:    ['A','E'],
-  ROZK2:    ['A','E'],
+  ROZK2:    ['A','D'],
+  ROZK5:    ['A','E','L'],
+  ROZK8:    ['A'],
+  VYFK:     ['A'],
   SPOK:     ['A'],
   SPOKV:    ['A'],
   ZSLH:     ['A','B'],
@@ -4047,7 +4348,7 @@ const DIM_PARAMS = {
   'RKKR':  ['A'],
   'RKHS':  ['A','B'],
   'RKHR':  ['A','B'],
-  // 'RKHR1':  ['A','B'],   // [VYRADENÉ: RKHR1]
+  'RKHR1': ['A','B'],
   'PZALS': ['A','B'],
   'PZZNS': ['A','B'],
   'KSK':   ['A'],
@@ -4082,6 +4383,8 @@ const DIM_TYPES = {
   NASH:     {A:'h', B:'h'},
   NASHN:    {A:'h', B:'h'},
   NASK:    {A:'r'},
+  NASHK:   {A:'r', E:'h', F:'h'},   // kruhová rúra s hranatým nástavcom → príruby všetky možnosti
+  NASKK:   {A:'r', E:'r'},
   ODH1:     {A:'h', B:'h'},
   ODH2:     {A:'h', B:'h'},
   ODK:      {A:'r'},
@@ -4095,11 +4398,15 @@ const DIM_TYPES = {
   PRKS:     {A:'r', B:'r'},
   PRK2:     {A:'r', B:'r'},
   ROZH2:    {A:'h', B:'h', C:'h', D:'h'},
+  ROZH6:    {A:'h', B:'h', C:'h', D:'h'},
   ROZH7:    {A:'h', B:'h', C:'h', D:'h'},
   ROZH10:   {A:'h', B:'h', D:'h', E:'h'},
   VYFH:     {A:'h', B:'h'},
   ROZK1:    {A:'r', E:'r'},
-  ROZK2:    {A:'r', E:'r'},
+  ROZK2:    {A:'r', D:'r'},
+  ROZK5:    {A:'r', E:'r', L:'r'},
+  ROZK8:    {A:'r'},
+  VYFK:     {A:'r'},
   SPOK:     {A:'r'},
   SPOKV:    {A:'r'},
   ZSLH:     {A:'h', B:'h'},
@@ -4110,7 +4417,7 @@ const DIM_TYPES = {
   'RKKR':  {A:'r'},
   'RKHS':  {A:'h', B:'h'},
   'RKHR':  {A:'h', B:'h'},
-  // 'RKHR1':  {A:'h', B:'h'},   // [VYRADENÉ: RKHR1]
+  'RKHR1': {A:'h', B:'h'},
   'PZALS': {A:'h', B:'h'},
   'PZZNS': {A:'h', B:'h'},
   'KSK':   {A:'r'},
@@ -4139,10 +4446,12 @@ const OUTPUT_DIM_PARAMS = {
   // OBLHPR90: [{col:'C',type:'h'},{col:'B',type:'h'}],   // [VYRADENÉ: OBLHPR90]
   OBLHPR:   [{col:'C',type:'h'},{col:'B',type:'h'}],
   ROZH2:    [{col:'C',type:'h'},{col:'B',type:'h'}],
+  ROZH6:    [{col:'C',type:'h'},{col:'B',type:'h'}],
   ROZH7:    [],
   ROZH10:   [],
   ROZK1:    [{col:'E',type:'r'}],
-  ROZK2:    [{col:'E',type:'r'}],
+  ROZK5:    [{col:'E',type:'r'}],
+  ROZK2:    [{col:'D',type:'r'}],
   NASH:     [{col:'A',type:'h'},{col:'B',type:'h'}],
   NASHN:    [{col:'A',type:'h'},{col:'B',type:'h'}],
   ODH1:     [{col:'A',type:'h'},{col:'B',type:'h'}],
@@ -4241,6 +4550,16 @@ function dragEnd(event) {
 }
 
 function dragOver(event, idx) {
+  // Súbor z počítača → príloha, len na riadok VOLNA (inde sa pustiť nedá)
+  if (jeSuborovyDrag(event)) {
+    if (rows[idx] && rows[idx].kod === 'VOLNA') {
+      event.preventDefault();
+      event.dataTransfer.dropEffect = 'copy';
+      const trF = document.querySelectorAll('#table-body tr')[idx];
+      if (trF) trF.classList.add('drag-file-over');
+    }
+    return;
+  }
   event.preventDefault();
   event.dataTransfer.dropEffect = 'move';
   const allTrs = document.querySelectorAll('#table-body tr');
@@ -4258,10 +4577,16 @@ function dragOver(event, idx) {
 }
 
 function dragLeave(tr) {
-  tr.classList.remove('drag-over-top', 'drag-over-bottom');
+  tr.classList.remove('drag-over-top', 'drag-over-bottom', 'drag-file-over');
 }
 
 function dragDrop(event, targetIdx) {
+  if (jeSuborovyDrag(event)) {
+    event.preventDefault();
+    document.querySelectorAll('#table-body tr.drag-file-over').forEach(t => t.classList.remove('drag-file-over'));
+    if (rows[targetIdx] && rows[targetIdx].kod === 'VOLNA') pridajPrilohy(targetIdx, event.dataTransfer.files);
+    return;
+  }
   event.preventDefault();
   const allTrs = document.querySelectorAll('#table-body tr');
   allTrs.forEach(tr => tr.classList.remove('drag-over-top', 'drag-over-bottom', 'dragging'));
@@ -4302,14 +4627,26 @@ const PARAM_DEFAULTS = {
   OBLHPR:   { E: '0', F: (row) => row.E || '0', G: (row) => (+row.E || +row.F) ? '1' : '150' },
   NASHN:    { C: '150' },
   ROZH2:    { E: '150', F: '150', G: '0', H: '0', I: '0', J: '0', K: '0', L: '0', M: '0', N: '0' },
+  ROZH6:    { F: '150', G: '150', H: '90', I: '90', J: '0', K: '0', L: '0', M: '0' },
   ROZH7:    { E: (row) => row.B || '', J: '30', K: '30' },
   VYFH:     { C: '100', D: '45' },
   ODH2:     { H: '45' },
-  ROZK2:    { G: '90' },
+  ROZK2:    { B: '50', C: '50', E: '120', F: '30', G: '30', H: '50' },
   ZSLK:     { B: '100' },
   ZSLKN:     { B: '100' },
   NASK:    { B: '100' },
+  NASHK:   { B: (row) => row.E ? String(+row.E + 100) : '', C: '0', D: '0' },   // B = šírka nástavca + 100
+  NASKK:   { B: (row) => naskkDlzkaRury(row.E, row.G), C: '0', D: '0',
+             F: (row) => naskkDlzkaNastavca(row.E, row.G), G: '90' },            // B, F podľa E a uhla G
+  ROZK1:   { B: (row) => naskkDlzkaRury(row.E, row.G), C: '0', D: '0',
+             F: (row) => naskkDlzkaNastavca(row.E, row.G), G: '90' },            // rovnako ako NASKK
+  ROZK5:   { B: (row) => rozk5DlzkaRury(row), C: '0', D: '0',
+             F: (row) => naskkDlzkaNastavca(row.E, row.G), G: '90',
+             L: (row) => row.E || '', M: (row) => naskkDlzkaNastavca(row.L, row.N), N: (row) => row.G || '' },
+  ROZK8:   { B: (row) => rozk8DlzkaBC(row.A), C: (row) => rozk8DlzkaBC(row.A), F: '50', G: '50' },   // B, C podľa priemeru
+  ODK:     { B: (row) => odkDlzka(row.A, row.C) },                                  // dĺžka podľa A a C
   RUS:      { B: '3000' },
+  THK:      { B: '300' },
   LISTA20:  { A: '5000' },
   LISTA30:  { A: '5000' },
   // Výška krabice sa dopočíta podľa už zadaného pripojenia C (prepísateľná)
@@ -4325,12 +4662,21 @@ const PARAM_DEFAULTS = {
 //   objekt        → doplní sa uvedená hodnota
 const DOPLNIT_PRI_POTVRDENI = {
   ROZH2: ['G', 'H', 'I', 'J', 'K', 'L', 'M', 'N'],
+  ROZH6: ['F', 'G', 'H', 'I', 'J', 'K', 'L', 'M'],   // polomery 150, uhly 90, veľkosti 0
   ROZH7: ['J', 'K'],
-  ROZK2: ['G'],
+  ROZK2: ['B', 'C', 'E', 'F', 'G', 'H'],
   // Nástavec a záslepky kruhové: nevyplnená dĺžka B = 100
   NASK:  ['B'],
   ZSLK:  ['B'],
   ZSLKN: ['B'],
+  // Nástavec hranatý na kruh: dĺžka B = E + 100, lem / sigma C, D = 0
+  NASHK: ['B', 'C', 'D'],
+  // Nástavec kruhový na kruh: dĺžky B, F podľa E a G, lem / sigma C, D = 0 (uhol G sa nedopĺňa)
+  NASKK: ['B', 'C', 'D', 'F'],
+  ROZK1: ['B', 'C', 'D', 'F'],      // rovnako ako NASKK (uhol G sa nedopĺňa)
+  ROZK5: ['C', 'D', 'L', 'N', 'F', 'M', 'B'],   // druhý nástavec podľa prvého, potom dĺžky (uhol G sa nedopĺňa)
+  ROZK8: ['B', 'C', 'F', 'G'],                   // dĺžky podľa priemeru, F, G = 50 (uhol D sa nedopĺňa)
+  ODK:   ['B'],                                  // dĺžka podľa priemeru A a offsetu C
   // Kolená a oblúky hranaté: nevyplnený zásek = 0 (bez záseku), napr. keď sa rovno zadá radius
   KOLH:   { D: '0', E: '0' },
   OBLH:   { D: '0', E: '0' },
@@ -4370,6 +4716,10 @@ function zobrazHodnotyRiadku(idx, cols) {
 
 function changeKod(idx, kod) {
   const staryKod = rows[idx].kod;
+  if (kod !== 'VOLNA' && Array.isArray(rows[idx].prilohy) && rows[idx].prilohy.length) {
+    delete rows[idx].prilohy;   // prílohy patria len k voľnej položke
+    toast('Prílohy riadku boli odstránené – patria len k voľnej položke (VOLNA)', 'err');
+  }
   PARAM_COLS.forEach(c => rows[idx][c] = '');
   rows[idx].kod = kod;
   aplikujPoznamku(rows[idx], staryKod, kod);   // napr. VYFH → „SITO“
@@ -4418,8 +4768,117 @@ function obnovAutoPolia(idx) {
   });
 }
 
-function setCell(idx, key, value) {
+// ── PREDIKCIA – pole sa dopočíta z iného poľa, ale dá sa ručne prepísať ──────────
+// Na rozdiel od autoFill (napevno, len na čítanie) je predikované pole bežný vstup: pri zmene
+// zdrojového poľa sa prepočíta, ak ho používateľ ručne neprepísal (je prázdne alebo má hodnotu
+// z predchádzajúceho výpočtu). Ručne zadaná iná hodnota ostáva.
+const PREDIKCIA = {
+  // Nástavec hranatý na kruh: dĺžka rúry B = šírka nástavca E + 100
+  NASHK: { B: { z: ['E'], fn: (row) => row.E ? String(+row.E + 100) : '' } },
+  // Nástavec kruhový na kruh: dĺžka rúry B a dĺžka nástavca F podľa priemeru nástavca E a uhla G
+  NASKK: {
+    B: { z: ['E', 'G'], fn: (row) => naskkDlzkaRury(row.E, row.G) },
+    F: { z: ['E', 'G'], fn: (row) => naskkDlzkaNastavca(row.E, row.G) },
+  },
+  // Rozbočka kruhová (T-čko) – rovnako ako NASKK
+  ROZK1: {
+    B: { z: ['E', 'G'], fn: (row) => naskkDlzkaRury(row.E, row.G) },
+    F: { z: ['E', 'G'], fn: (row) => naskkDlzkaNastavca(row.E, row.G) },
+  },
+  // Rozbočka kruhová obojstranná: druhý nástavec podľa prvého, dĺžky nástavcov a rúry (poradie = poradie prepočtu)
+  ROZK5: {
+    L: { z: ['E'], fn: (row) => row.E || '' },
+    N: { z: ['G'], fn: (row) => row.G || '' },
+    F: { z: ['E', 'G'], fn: (row) => naskkDlzkaNastavca(row.E, row.G) },
+    M: { z: ['L', 'N'], fn: (row) => naskkDlzkaNastavca(row.L, row.N) },
+    B: { z: ['E', 'G', 'L', 'N'], fn: (row) => rozk5DlzkaRury(row) },
+  },
+  // Rozbočka kruhová Y: vnútorná a vonkajšia dĺžka podľa priemeru (50 do ⌀315, 100 nad ⌀315)
+  ROZK8: {
+    B: { z: ['A'], fn: (row) => rozk8DlzkaBC(row.A) },
+    C: { z: ['A'], fn: (row) => rozk8DlzkaBC(row.A) },
+  },
+  // Odskok kruhový: dĺžka B podľa priemeru A a offsetu C (A + 100 / A + 101, min. 2 × C)
+  ODK: { B: { z: ['A', 'C'], fn: (row) => odkDlzka(row.A, row.C) } },
+};
+
+// ODK – predvolená dĺžka B: priemer A + 100 (ak je A menšie ako offset C, tak A + 101),
+// najmenej však 2 × C, aby predvyplnená dĺžka vždy prešla kontrolou (A 400, C 100 → 500; A 400, C 300 → 600)
+function odkDlzka(a, c) {
+  const A = +a, C = +c || 0;
+  if (!(A > 0)) return '';
+  const zVzorca = A < C ? A + 101 : A + 100;
+  return String(Math.max(zVzorca, 2 * C));
+}
+
+// ROZK8 – vnútorná a vonkajšia dĺžka (štandard aj predvolená hodnota): do ⌀315 → 50, nad ⌀315 → 100
+function rozk8DlzkaBC(a) {
+  const A = +a;
+  return A > 0 ? String(A > 315 ? 100 : 50) : '';
+}
+
+// ROZK5 – dĺžka rúry podľa horšieho z oboch nástavcov (dlhšia z dĺžok ako pri NASKK)
+function rozk5DlzkaRury(row) {
+  const d = [naskkDlzkaRury(row.E, row.G), naskkDlzkaRury(row.L, row.N)].filter(v => v !== '').map(Number);
+  return d.length ? String(Math.max(...d)) : '';
+}
+
+// NASKK a ROZK1 – dĺžka rúry B: uhol 30–40° → 3 × E, 41–89° → 2 × E, 90° → E + 100 (bez E alebo uhla mimo 30–90° → nič)
+function naskkDlzkaRury(e, g) {
+  const E = +e, G = +g;
+  if (!(E > 0) || !(G >= 30 && G <= 90)) return '';
+  if (G <= 40) return String(3 * E);
+  if (G < 90) return String(2 * E);
+  return String(E + 100);
+}
+
+// NASKK a ROZK1 – dĺžka nástavca F: uhol 30–40° → E × 0,7, 41–90° → E × 0,4 (zaokrúhlené na celé mm)
+function naskkDlzkaNastavca(e, g) {
+  const E = +e, G = +g;
+  if (!(E > 0) || !(G >= 30 && G <= 90)) return '';
+  return String(Math.round(E * (G <= 40 ? 0.7 : 0.4)));
+}
+
+// Aktuálne vypočítané hodnoty predikovaných polí riadku (pred zmenou) – na porovnanie s bunkou
+function predikciaStav(row) {
+  const spec = row && PREDIKCIA[row.kod];
+  if (!spec) return null;
+  const out = {};
+  Object.entries(spec).forEach(([col, p]) => { out[col] = p.fn(row); });
+  return out;
+}
+
+// Po zmene poľa `key` prepočíta predikované polia, ktoré z neho vychádzajú (a zobrazí ich v bunke)
+function obnovPredikciu(idx, key, predtym) {
+  const row = rows[idx];
+  const spec = row && PREDIKCIA[row.kod];
+  if (!spec || !predtym) return;
+  const zmenene = new Set([key]);                          // zmenené polia – aj tie, ktoré sa prepočítali (reťazenie)
+  Object.entries(spec).forEach(([col, p]) => {            // v poradí definície: závislé polia sú za svojimi zdrojmi
+    if (col === key || !p.z.some(z => zmenene.has(z))) return;
+    const akt = row[col] || '';
+    if (akt !== '' && akt !== predtym[col]) return;     // ručne prepísané – nemeníme
+    const nova = p.fn(row);
+    if (nova === akt) return;
+    row[col] = nova;
+    zmenene.add(col);
+    const el = document.querySelector(`#table-body [data-row="${idx}"][data-key="${col}"]`);
+    if (el) {
+      el.value = nova;
+      if (nova) el.classList.remove('invalid');
+    }
+  });
+}
+
+// Zapíše hodnotu do riadku a prepočíta predikované polia
+function zapisHodnotu(idx, key, value) {
+  const predtym = predikciaStav(rows[idx]);
   rows[idx][key] = value;
+  obnovPredikciu(idx, key, predtym);
+}
+
+function setCell(idx, key, value) {
+  zapisHodnotu(idx, key, value);
   obnovAutoPolia(idx);
   updateStats();
   updateAtypBadge(idx);
@@ -4690,6 +5149,15 @@ async function exportExcel() {
   // ── DATA ROWS ─────────────────────────────────────────
   const PARAM_ORDER = ['A','B','C','D','E','F','G','H','I','J','K','L','M','N','O'];
   const POZN_ZNAKOV = 13;           // približne znakov na riadok v stĺpci Poznámka
+  // Prílohy voľných položiek – názov súboru sa dopíše do poznámky riadku (v balíku je navyše pozícia na začiatku)
+  const prilohyExport = prilohyNaExport();
+  const prilohyRiadku = {};
+  prilohyExport.forEach(e => { (prilohyRiadku[e.idx] = prilohyRiadku[e.idx] || []).push(e.kratky); });
+  const poznamkaRiadku = (row, ri) => {
+    const nazvy = prilohyRiadku[ri] || [];
+    const priloha = nazvy.length ? (nazvy.length === 1 ? 'Príloha: ' : 'Prílohy: ') + nazvy.join(', ') : '';
+    return [row.poznamka || '', priloha].filter(Boolean).join('\n');
+  };
   rows.forEach((row, ri) => {
     const excelRow = 7 + ri;
     const vals = [
@@ -4700,7 +5168,7 @@ async function exportExcel() {
         return (v !== '' && v !== undefined && v !== null) ? (isNaN(+v) ? v : +v) : '';
       }),
       row.priruba_C1 || '', row.priruba_C2 || '', row.priruba_C3 || '',
-      row.poznamka || '',
+      poznamkaRiadku(row, ri),
     ];
     vals.forEach((v, ci) => {
       const col = ci + 1;
@@ -4716,7 +5184,7 @@ async function exportExcel() {
         setCell(addr, v, typeof v === 'number' ? { shrink: true } : { wrap: false });
       }
     });
-    const riadkyPozn = pocetRiadkov(row.poznamka, POZN_ZNAKOV);
+    const riadkyPozn = poznamkaRiadku(row, ri).split('\n').reduce((n, t) => n + pocetRiadkov(t, POZN_ZNAKOV), 0);
     ws.getRow(excelRow).height = Math.max(22, riadkyPozn * 15.75 + 6);
   });
 
@@ -4763,16 +5231,35 @@ async function exportExcel() {
   ws.views = [{ state: 'frozen', xSplit: 0, ySplit: 6, topLeftCell: 'A7', activeCell: 'A7' }];
 
   // ── Export ───────────────────────────────────────────
-  const fname = `${zakazka ? zakazka.replace(/\//g,'-') : 'rozpis'}_${zariadenie.replace(/[^a-zA-Z0-9]/g,'_').slice(0,30)}.xlsx`;
+  const zaklad = `${zakazka ? zakazka.replace(/\//g,'-') : 'rozpis'}_${zariadenie.replace(/[^a-zA-Z0-9]/g,'_').slice(0,30)}`;
+  const fname = `${zaklad}.xlsx`;
   const buf = await wb.xlsx.writeBuffer();
-  const blob = new Blob([buf], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
-  const a = document.createElement('a');
-  a.href = URL.createObjectURL(blob);
-  a.download = fname;
-  a.click();
-  URL.revokeObjectURL(a.href);
+  const xlsxBlob = new Blob([buf], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
 
-  toast(`Súbor ${fname} bol stiahnutý`, 'ok');
+  // Bez príloh – len Excel ako doteraz
+  if (prilohyExport.length === 0) {
+    stiahniSubor(xlsxBlob, fname);
+    toast(`Súbor ${fname} bol stiahnutý`, 'ok');
+    markClean();
+    return;
+  }
+
+  // S prílohami voľných položiek – jeden ZIP: Excel + priečinok Prilohy (pozícia_súbor)
+  const n = prilohyExport.length;
+  if (typeof JSZip === 'undefined') {
+    // knižnica na ZIP sa nenačítala → súbory sa stiahnu jednotlivo
+    stiahniSubor(xlsxBlob, fname);
+    prilohyExport.forEach((e, i) => setTimeout(() => stiahniSubor(prilohaBlob(e.priloha), e.nazov), 400 * (i + 1)));
+    toast(`Stiahnutý Excel a ${n} ${slovoPrilohy(n)} (jednotlivo, ZIP nie je dostupný)`, 'ok');
+    markClean();
+    return;
+  }
+  const zip = new JSZip();
+  zip.file(fname, buf);
+  prilohyExport.forEach(e => zip.file('Prilohy/' + e.nazov, e.priloha.data, { base64: true }));
+  const zipBlob = await zip.generateAsync({ type: 'blob', mimeType: 'application/zip' });
+  stiahniSubor(zipBlob, `${zaklad}.zip`);
+  toast(`Súbor ${zaklad}.zip bol stiahnutý (Excel + ${n} ${slovoPrilohy(n)})`, 'ok');
   markClean();
 }
 
@@ -4803,6 +5290,7 @@ function loadFromFile(event) {
     try {
       const data = JSON.parse(e.target.result);
       applyState(data);
+      if (odstranNeuplnePrilohy()) render();   // poškodená príloha bez obsahu – treba ju priložiť znova
       toast('Zákazka načítaná: ' + file.name, 'ok');
       markClean();   // obsah je zo súboru – záloha netreba, kým sa nič nezmení
     } catch(err) {
@@ -4956,6 +5444,429 @@ function toast(msg, type='ok') {
 }
 
 // ══════════════════════════════════════════════════════
+//  PRÍLOHY VOĽNEJ POLOŽKY (📎)
+//  Voľná položka (VOLNA) musí mať aspoň jednu prílohu – náčrt alebo výkres
+//  výrobku (DWG, PDF, JPG… – akýkoľvek súbor). Príloha je v súbore zákazky (💾),
+//  v automatickej zálohe (obsah v IndexedDB) a pri exporte ide s Excelom do ZIP-u
+//  (priečinok Prilohy, názov = pozícia_pôvodný názov).
+// ══════════════════════════════════════════════════════
+const PRILOHA_MAX_MB = 25;
+
+function novyIdPrilohy() {
+  return 'p' + Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
+}
+
+// Prílohy riadku s obsahom (zo zálohy sa obsah dopĺňa z IndexedDB)
+function platnePrilohy(row) {
+  return (row && Array.isArray(row.prilohy)) ? row.prilohy.filter(p => p && p.data) : [];
+}
+
+function slovoPrilohy(n) {
+  return n === 1 ? 'príloha' : (n >= 2 && n <= 4) ? 'prílohy' : 'príloh';
+}
+
+function velkostSuboru(b) {
+  if (b >= 1024 * 1024) return (b / 1024 / 1024).toFixed(1).replace('.', ',') + ' MB';
+  return Math.max(1, Math.round(b / 1024)) + ' kB';
+}
+
+function escHtml(t) {
+  return String(t == null ? '' : t).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+}
+
+// Tlačidlo 📎 pod kódom VOLNA: červené „Priložiť“, kým nie je nič priložené; potom zelené „1 príloha“
+function prilohaTlacidloHTML(row, idx) {
+  const list = platnePrilohy(row);
+  if (!list.length) {
+    return `<button type="button" class="priloha-btn chyba" tabindex="-1" data-priloha-row="${idx}" onclick="prilohaKlik(${idx})"
+      title="Voľná položka musí mať prílohu – náčrt alebo výkres (DWG, PDF, JPG…). Kliknite sem alebo pretiahnite súbor na riadok.">📎 Priložiť</button>`;
+  }
+  const text = `${list.length} ${slovoPrilohy(list.length)}`;   // názvy sú v bubline a v okne príloh
+  const tip = list.map(p => `${p.name} (${velkostSuboru(p.size)})`).join('\n') + '\n\nKliknutím otvoríte prílohy.';
+  return `<button type="button" class="priloha-btn ok" tabindex="-1" data-priloha-row="${idx}" onclick="prilohaKlik(${idx})"
+    title="${escHtml(tip)}">📎 ${escHtml(text)}</button>`;
+}
+
+// Bez prílohy → hneď výber súboru; s prílohou → okno so zoznamom
+function prilohaKlik(idx) {
+  const row = rows[idx];
+  if (!row) return;
+  if (platnePrilohy(row).length) otvorPrilohyDialog(idx);
+  else vyberSuborPrilohy(idx);
+}
+
+function vyberSuborPrilohy(idx) {
+  const inp = document.getElementById('priloha-input');
+  if (!inp || idx < 0) return;
+  inp.value = '';
+  inp.dataset.row = String(idx);
+  inp.click();
+}
+
+function prilohaVybrane(event) {
+  const inp = event.target;
+  const idx = parseInt(inp.dataset.row, 10);
+  const files = Array.from(inp.files || []);
+  inp.value = '';
+  pridajPrilohy(idx, files);
+}
+
+function citajPrilohu(file) {
+  return new Promise((resolve, reject) => {
+    const fr = new FileReader();
+    fr.onload = () => {
+      const u = String(fr.result || '');
+      resolve({ id: novyIdPrilohy(), name: file.name, type: file.type || '', size: file.size, data: u.slice(u.indexOf(',') + 1) });
+    };
+    fr.onerror = () => reject(fr.error);
+    fr.readAsDataURL(file);
+  });
+}
+
+// Pridá súbory k riadku VOLNA (tlačidlo 📎, okno príloh alebo pretiahnutie na riadok)
+async function pridajPrilohy(idx, fileList) {
+  const row = rows[idx];
+  const files = Array.from(fileList || []);
+  if (!row || !files.length) return;
+  if (row.kod !== 'VOLNA') { toast('Prílohu možno pridať len k voľnej položke (VOLNA)', 'err'); return; }
+  const velke = files.filter(f => f.size > PRILOHA_MAX_MB * 1024 * 1024);
+  const prazdne = files.filter(f => f.size === 0);
+  const uz = platnePrilohy(row);
+  const duplicitne = files.filter(f => uz.some(p => p.name === f.name && p.size === f.size));
+  const vhodne = files.filter(f => !velke.includes(f) && !prazdne.includes(f) && !duplicitne.includes(f));
+  let nove = [];
+  try {
+    nove = await Promise.all(vhodne.map(citajPrilohu));
+  } catch (e) {
+    toast('Súbor sa nepodarilo načítať', 'err');
+    return;
+  }
+  if (rows.indexOf(row) < 0) return;   // riadok medzitým zmazaný
+  nove = nove.filter(p => p.data);
+  if (nove.length) {
+    row.prilohy = (Array.isArray(row.prilohy) ? row.prilohy : []).concat(nove);
+    nove.forEach(prilohaDoZalohy);
+    render();
+    obnovPrilohyDialog();
+  }
+  if (velke.length) toast(`Súbor je príliš veľký (max. ${PRILOHA_MAX_MB} MB): ${velke.map(f => f.name).join(', ')}`, 'err');
+  else if (prazdne.length) toast(`Prázdny súbor sa nedá priložiť: ${prazdne.map(f => f.name).join(', ')}`, 'err');
+  else if (duplicitne.length && !nove.length) toast('Tento súbor už je priložený', 'err');
+  else if (nove.length) toast(nove.length === 1 ? `Priložené: ${nove[0].name}` : `Priložené ${nove.length} ${slovoPrilohy(nove.length)}`, 'ok');
+}
+
+function odstranPrilohu(row, p) {
+  if (!confirm(`Odstrániť prílohu „${p.name}“?`)) return;
+  row.prilohy = (Array.isArray(row.prilohy) ? row.prilohy : []).filter(x => x !== p);
+  if (!row.prilohy.length) delete row.prilohy;
+  render();
+  obnovPrilohyDialog();
+  toast('Príloha odstránená', 'ok');
+}
+
+function prilohaBlob(p) {
+  const bin = atob(p.data);
+  const bytes = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+  return new Blob([bytes], { type: p.type || 'application/octet-stream' });
+}
+
+function stiahniSubor(blob, name) {
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = name;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(a.href), 10000);
+}
+
+// PDF a obrázky sa otvoria v novej karte, ostatné (DWG…) sa stiahnu
+function otvorPrilohu(p) {
+  const blob = prilohaBlob(p);
+  const nahlad = /^(application\/pdf|image\/(png|jpe?g|gif|webp|bmp)|text\/plain)$/i.test(p.type || '');
+  if (nahlad) {
+    const url = URL.createObjectURL(blob);
+    const w = window.open(url, '_blank');
+    if (!w) stiahniSubor(blob, p.name);
+    setTimeout(() => URL.revokeObjectURL(url), 60000);
+  } else {
+    stiahniSubor(blob, p.name);
+  }
+}
+
+// ── Okno príloh (zoznam, otvoriť, odstrániť, pridať ďalšiu) ──
+let prilohyDialogRow = null;
+
+function otvorPrilohyDialog(idx) {
+  zavriPrilohyDialog();
+  const row = rows[idx];
+  if (!row) return;
+  prilohyDialogRow = row;
+  const btnStyle = 'padding:6px 12px; border:1px solid #cdd6e8; border-radius:6px; background:white; cursor:pointer; font-size:12.5px;';
+  const overlay = document.createElement('div');
+  overlay.id = 'prilohy-overlay';
+  overlay.style.cssText = `
+    position:fixed; inset:0; background:rgba(0,0,0,0.4);
+    display:flex; align-items:center; justify-content:center; z-index:9999;
+    font-family:'Segoe UI',sans-serif; padding:16px; box-sizing:border-box;
+  `;
+  overlay.innerHTML = `
+    <div id="prilohy-box" role="dialog" aria-modal="true" aria-labelledby="prilohy-title"
+         style="background:white; border-radius:10px; padding:22px 26px; max-width:540px; width:100%;
+                box-shadow:0 8px 32px rgba(0,0,0,0.25);">
+      <div id="prilohy-title" style="font-size:16px; font-weight:700; color:#012349; margin-bottom:4px;">📎 Prílohy voľnej položky</div>
+      <div id="prilohy-riadok" style="font-size:12.5px; color:#6b7a8d; margin-bottom:14px;"></div>
+      <div id="prilohy-zoznam" style="display:flex; flex-direction:column; gap:6px;"></div>
+      <div id="prilohy-drop" style="margin-top:12px; border:2px dashed #b9c6da; border-radius:8px; padding:14px;
+           text-align:center; font-size:13px; color:#5a6b85;">
+        Pretiahnite súbory sem alebo
+        <button type="button" id="prilohy-pridat" style="${btnStyle} margin-left:6px; font-weight:600; color:#012349;">＋ Pridať súbor</button>
+        <div style="font-size:11.5px; color:#8a97a8; margin-top:6px;">Náčrt alebo výkres – DWG, PDF, JPG… (max. ${PRILOHA_MAX_MB} MB na súbor)</div>
+      </div>
+      <div style="display:flex; justify-content:flex-end; margin-top:18px;">
+        <button type="button" id="prilohy-zavriet" style="padding:8px 18px; border:none; border-radius:6px;
+          background:#012349; color:white; cursor:pointer; font-size:13px; font-weight:600;">Zavrieť</button>
+      </div>
+    </div>
+  `;
+  document.body.appendChild(overlay);
+
+  const box = overlay.querySelector('#prilohy-box');
+  const drop = overlay.querySelector('#prilohy-drop');
+  overlay.querySelector('#prilohy-pridat').onclick = () => vyberSuborPrilohy(rows.indexOf(prilohyDialogRow));
+  overlay.querySelector('#prilohy-zavriet').onclick = zavriPrilohyDialog;
+  overlay.addEventListener('mousedown', (e) => { if (e.target === overlay) zavriPrilohyDialog(); });
+  box.addEventListener('dragover', (e) => {
+    if (!jeSuborovyDrag(e)) return;
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'copy';
+    drop.classList.add('nad');
+  });
+  box.addEventListener('dragleave', (e) => { if (!box.contains(e.relatedTarget)) drop.classList.remove('nad'); });
+  box.addEventListener('drop', (e) => {
+    if (!jeSuborovyDrag(e)) return;
+    e.preventDefault();
+    drop.classList.remove('nad');
+    pridajPrilohy(rows.indexOf(prilohyDialogRow), e.dataTransfer.files);
+  });
+  // Esc zavrie okno; fokus ostáva v okne (Enter nesmie pridávať riadky v tabuľke)
+  overlay._klavesy = (e) => { if (e.key === 'Escape') { e.preventDefault(); zavriPrilohyDialog(); } };
+  overlay._fokus = (e) => { if (!box.contains(e.target)) overlay.querySelector('#prilohy-zavriet').focus(); };
+  document.addEventListener('keydown', overlay._klavesy, true);
+  document.addEventListener('focusin', overlay._fokus, true);
+  obnovPrilohyDialog();
+  setTimeout(() => { const z = overlay.querySelector('#prilohy-zavriet'); if (z) z.focus(); }, 0);
+}
+
+function zavriPrilohyDialog() {
+  const overlay = document.getElementById('prilohy-overlay');
+  if (!overlay) return;
+  document.removeEventListener('keydown', overlay._klavesy, true);
+  document.removeEventListener('focusin', overlay._fokus, true);
+  overlay.remove();
+  prilohyDialogRow = null;
+}
+
+function obnovPrilohyDialog() {
+  const overlay = document.getElementById('prilohy-overlay');
+  const row = prilohyDialogRow;
+  if (!overlay || !row) return;
+  const idx = rows.indexOf(row);
+  overlay.querySelector('#prilohy-riadok').textContent =
+    `Riadok ${idx + 1}` + (row.pozicia ? ` · ${row.pozicia}` : '') + (row.poznamka ? ` · ${row.poznamka}` : '');
+  const zoznam = overlay.querySelector('#prilohy-zoznam');
+  zoznam.innerHTML = '';
+  const list = platnePrilohy(row);
+  if (!list.length) {
+    const nic = document.createElement('div');
+    nic.style.cssText = 'font-size:13px; color:#c0392b; background:#fff1ee; border-radius:6px; padding:9px 12px;';
+    nic.textContent = 'Zatiaľ nie je nič priložené – voľná položka musí mať aspoň jednu prílohu.';
+    zoznam.appendChild(nic);
+  }
+  const tlacidlo = (text, fn, farba) => {
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.textContent = text;
+    b.style.cssText = `padding:5px 10px; border:1px solid #cdd6e8; border-radius:6px; background:white; cursor:pointer;
+                       font-size:12px; color:${farba || '#012349'}; flex:none;`;
+    b.onclick = fn;
+    return b;
+  };
+  list.forEach(p => {
+    const item = document.createElement('div');
+    item.className = 'priloha-polozka';
+    item.style.cssText = 'display:flex; align-items:center; gap:10px; border:1px solid #e1e7f0; border-radius:6px; padding:7px 10px; background:#f8fafd;';
+    const ikona = document.createElement('span');
+    ikona.textContent = '📄';
+    ikona.style.fontSize = '18px';
+    const info = document.createElement('div');
+    info.style.cssText = 'flex:1; min-width:0;';
+    const nazov = document.createElement('div');
+    nazov.className = 'priloha-nazov';
+    nazov.textContent = p.name;
+    nazov.title = p.name;
+    nazov.style.cssText = 'font-size:13px; font-weight:600; color:#0d1a35; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;';
+    const vel = document.createElement('div');
+    vel.textContent = velkostSuboru(p.size);
+    vel.style.cssText = 'font-size:11.5px; color:#8a97a8;';
+    info.append(nazov, vel);
+    item.append(ikona, info, tlacidlo('Otvoriť', () => otvorPrilohu(p)), tlacidlo('Odstrániť', () => odstranPrilohu(row, p), '#c0392b'));
+    zoznam.appendChild(item);
+  });
+}
+
+// ── Pretiahnutie súboru z počítača ──
+function jeSuborovyDrag(e) {
+  const t = e && e.dataTransfer && e.dataTransfer.types;
+  return !!t && Array.from(t).includes('Files');
+}
+// Súbor pustený mimo riadku VOLNA (alebo okna príloh) nesmie otvoriť súbor namiesto formulára
+window.addEventListener('dragover', (e) => {
+  if (jeSuborovyDrag(e) && !e.defaultPrevented) { e.preventDefault(); e.dataTransfer.dropEffect = 'none'; }
+});
+window.addEventListener('drop', (e) => {
+  if (jeSuborovyDrag(e) && !e.defaultPrevented) e.preventDefault();
+});
+
+// ── Export: prílohy voľných položiek a ich názvy v balíku ──
+function bezpecnyNazov(t) {
+  return String(t || '').replace(/[\\/:*?"<>|\u0000-\u001f]/g, '_').replace(/\s+/g, ' ').trim().replace(/^\.+/, '');
+}
+
+// [{ idx, priloha, nazov, kratky }] – názov = pozícia_pôvodný názov (bez zakázaných znakov a bez duplicít)
+function prilohyNaExport() {
+  const out = [];
+  const pouzite = new Set();
+  rows.forEach((row, idx) => {
+    if (row.kod !== 'VOLNA') return;
+    platnePrilohy(row).forEach(p => {
+      const poz = bezpecnyNazov(String(row.pozicia || '').trim()) || `riadok${idx + 1}`;
+      let nazov = `${poz}_${bezpecnyNazov(p.name) || 'priloha'}`;
+      const bodka = nazov.lastIndexOf('.');
+      const zakl = bodka > poz.length ? nazov.slice(0, bodka) : nazov;
+      const pripona = bodka > poz.length ? nazov.slice(bodka) : '';
+      for (let k = 2; pouzite.has(nazov.toLowerCase()); k++) nazov = `${zakl} (${k})${pripona}`;
+      pouzite.add(nazov.toLowerCase());
+      out.push({ idx, priloha: p, nazov, kratky: nazov.slice(poz.length + 1) });   // kratky = bez pozície (do Excelu)
+    });
+  });
+  return out;
+}
+
+// Prílohy bez obsahu (napr. sa nepodarilo obnoviť zo zálohy) – preč; vráti ich počet
+function odstranNeuplnePrilohy() {
+  let n = 0;
+  rows.forEach(r => {
+    if (!Array.isArray(r.prilohy)) return;
+    const pred = r.prilohy.length;
+    r.prilohy = r.prilohy.filter(p => p && p.data);
+    n += pred - r.prilohy.length;
+    if (!r.prilohy.length) delete r.prilohy;
+  });
+  return n;
+}
+
+// ── Prílohy v automatickej zálohe (IndexedDB) ──
+// localStorage má len pár MB, preto je v zálohe len zoznam príloh a ich obsah je v IndexedDB.
+const PRILOHY_IDB = 'apiagra-rozpis-potrubia-prilohy';
+const PRILOHY_STORE = 'prilohy';
+const prilohyVZalohe = new Set();     // id príloh, ktoré táto karta zapísala do IndexedDB
+let prilohyIdbSlub = null;
+
+function prilohyIdb() {
+  if (!prilohyIdbSlub) {
+    prilohyIdbSlub = new Promise((resolve, reject) => {
+      try {
+        const req = indexedDB.open(PRILOHY_IDB, 1);
+        req.onupgradeneeded = () => req.result.createObjectStore(PRILOHY_STORE);
+        req.onsuccess = () => resolve(req.result);
+        req.onerror = () => reject(req.error);
+      } catch (e) { reject(e); }
+    });
+    prilohyIdbSlub.catch(() => { prilohyIdbSlub = null; });
+  }
+  return prilohyIdbSlub;
+}
+
+function prilohyIdbOp(mode, fn) {
+  return prilohyIdb().then(db => new Promise((resolve, reject) => {
+    const tx = db.transaction(PRILOHY_STORE, mode);
+    let vysledok;
+    const req = fn(tx.objectStore(PRILOHY_STORE));
+    if (req) req.onsuccess = () => { vysledok = req.result; };
+    tx.oncomplete = () => resolve(vysledok);
+    tx.onerror = () => reject(tx.error);
+    tx.onabort = () => reject(tx.error);
+  }));
+}
+
+function prilohaDoZalohy(p) {
+  if (!p || !p.data || prilohyVZalohe.has(p.id)) return;
+  prilohyVZalohe.add(p.id);
+  prilohyIdbOp('readwrite', st => st.put({ data: p.data, t: Date.now() }, p.id)).catch(() => prilohyVZalohe.delete(p.id));
+}
+
+function prilohyZoZalohyZmaz(ids) {
+  const zoznam = (ids || []).filter(Boolean);
+  zoznam.forEach(id => prilohyVZalohe.delete(id));
+  if (!zoznam.length) return;
+  prilohyIdbOp('readwrite', st => { zoznam.forEach(id => st.delete(id)); }).catch(() => {});
+}
+
+function idPrilohVoStave(state) {
+  const out = [];
+  ((state && Array.isArray(state.rows)) ? state.rows : []).forEach(r => {
+    if (r && Array.isArray(r.prilohy)) r.prilohy.forEach(p => { if (p && p.id) out.push(p.id); });
+  });
+  return out;
+}
+
+// Po zápise zálohy: chýbajúce prílohy do IndexedDB, odstránené z nej preč
+function synchronizujPrilohyVZalohe() {
+  const ids = new Set(idPrilohVoStave({ rows }));
+  rows.forEach(r => platnePrilohy(r).forEach(prilohaDoZalohy));
+  prilohyZoZalohyZmaz([...prilohyVZalohe].filter(id => !ids.has(id)));
+}
+
+// Stav pre automatickú zálohu – prílohy bez obsahu (obsah je v IndexedDB)
+function collectStateZaloha() {
+  const st = collectState();
+  st.rows = st.rows.map(r => (Array.isArray(r.prilohy) && r.prilohy.length)
+    ? Object.assign({}, r, { prilohy: r.prilohy.map(p => ({ id: p.id, name: p.name, type: p.type, size: p.size })) })
+    : r);
+  return st;
+}
+
+// Po obnove zálohy doplní obsah príloh z IndexedDB; čo sa nenájde, treba priložiť znova
+async function obnovPrilohyZoZalohy() {
+  const bezObsahu = [];
+  rows.forEach(r => (Array.isArray(r.prilohy) ? r.prilohy : []).forEach(p => { if (p && !p.data) bezObsahu.push(p); }));
+  if (!bezObsahu.length) return;
+  await Promise.all(bezObsahu.map(p => prilohyIdbOp('readonly', st => st.get(p.id))
+    .then(v => { if (v && typeof v.data === 'string' && v.data) { p.data = v.data; prilohyVZalohe.add(p.id); } })
+    .catch(() => {})));
+  const chyba = odstranNeuplnePrilohy();
+  render();
+  if (chyba) toast(`Niektoré prílohy sa nepodarilo obnoviť (${chyba}) – priložte ich znova 📎`, 'err');
+}
+
+// Pri štarte: zmaž staré prílohy v IndexedDB, ktoré nepatria k aktuálnej zálohe (staršie ako 7 dní)
+function vycistiStarePrilohyVZalohe(rec) {
+  const ponechat = new Set(rec ? idPrilohVoStave(rec.data) : []);
+  const hranica = Date.now() - 7 * 24 * 3600 * 1000;
+  prilohyIdbOp('readwrite', st => {
+    const req = st.openCursor();
+    req.onsuccess = () => {
+      const c = req.result;
+      if (!c) return;
+      if (!ponechat.has(c.key) && !(c.value && c.value.t > hranica)) c.delete();
+      c.continue();
+    };
+  }).catch(() => {});
+}
+
+// ══════════════════════════════════════════════════════
 //  AUTOMATICKÁ ZÁLOHA (localStorage)
 //  Poistka proti strate rozpracovanej rozpisky (pád PC, zavretá karta).
 //  Záloha je len v tomto prehliadači na tomto PC – trvalé uloženie
@@ -4995,6 +5906,21 @@ function sanitizeRows(list) {
       ['priruba_C1', 'priruba_C2', 'priruba_C3'].forEach(k => {
         if (Object.prototype.hasOwnProperty.call(PRIRUBA_PREMENOVANIE, r[k])) r[k] = PRIRUBA_PREMENOVANIE[r[k]];
       });
+      // Prílohy – len pri VOLNA; zo zálohy prichádzajú bez obsahu (doplní sa z IndexedDB)
+      if (r.kod === 'VOLNA' && Array.isArray(r.prilohy)) {
+        r.prilohy = r.prilohy
+          .filter(p => p && typeof p.name === 'string' && p.name)
+          .map(p => ({
+            id: (typeof p.id === 'string' && p.id) ? p.id : novyIdPrilohy(),
+            name: p.name,
+            type: typeof p.type === 'string' ? p.type : '',
+            size: +p.size || 0,
+            data: typeof p.data === 'string' ? p.data : '',
+          }));
+        if (!r.prilohy.length) delete r.prilohy;
+      } else {
+        delete r.prilohy;
+      }
       return r;
     });
 }
@@ -5082,13 +6008,14 @@ function autosaveNow() {
 
   let state, json;
   try {
-    state = collectState();
+    state = collectStateZaloha();
     json = JSON.stringify(state);
   } catch (e) { return; }
   if (json === autosaveLastJson) return;          // nič nové na zálohovanie
 
   if (!stateHasContent(state)) {                   // prázdny formulár sa nezálohuje
     autosaveRemove(true);
+    prilohyZoZalohyZmaz([...prilohyVZalohe]);
     autosaveLastJson = json;
     setAutosaveStatus('');
     return;
@@ -5100,6 +6027,7 @@ function autosaveNow() {
     autosaveOwnedAt = savedAt;
     autosaveLastJson = json;
     setAutosaveStatus('Zálohované o ' + autosaveFormatTime(savedAt));
+    synchronizujPrilohyVZalohe();   // obsah príloh do IndexedDB (localStorage má len pár MB)
   } catch (e) {
     // Plné alebo zakázané úložisko prehliadača
     setAutosaveStatus('Záloha nedostupná', true);
@@ -5110,13 +6038,14 @@ function autosaveNow() {
 // rozpiska je bezpečne v súbore → záloha v prehliadači sa zmaže
 function markClean() {
   autosaveRemove(true);
-  try { autosaveLastJson = JSON.stringify(collectState()); } catch (e) {}
+  prilohyZoZalohyZmaz([...prilohyVZalohe]);   // záloha je preč → jej prílohy v IndexedDB tiež
+  try { autosaveLastJson = JSON.stringify(collectStateZaloha()); } catch (e) {}
   setAutosaveStatus('');
 }
 
 function armAutosave() {
   autosaveArmed = true;
-  try { autosaveLastJson = JSON.stringify(collectState()); } catch (e) {}
+  try { autosaveLastJson = JSON.stringify(collectStateZaloha()); } catch (e) {}
 }
 
 function showRestorePrompt(rec) {
@@ -5192,11 +6121,13 @@ function showRestorePrompt(rec) {
     armAutosave();
     setAutosaveStatus('Zálohované o ' + autosaveFormatTime(rec.savedAt));
     toast('Rozpracovaná rozpiska obnovená', 'ok');
+    obnovPrilohyZoZalohy();   // obsah príloh z IndexedDB
   };
 
   btnNew.onclick = () => {
     close();
     autosaveRemove(false);
+    prilohyZoZalohyZmaz(idPrilohVoStave(rec.data));
     armAutosave();
     const first = document.querySelector('#table-body [data-row="0"]');
     if (first) first.focus();
@@ -5207,6 +6138,7 @@ function showRestorePrompt(rec) {
 
 function initAutosave() {
   const rec = autosaveRead();
+  vycistiStarePrilohyVZalohe(rec);
   if (rec && stateHasContent(rec.data)) {
     showRestorePrompt(rec);      // zálohovanie sa zapne až po voľbe používateľa
   } else {
