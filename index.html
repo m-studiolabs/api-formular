@@ -3513,8 +3513,57 @@ function checkTlmicovaVlozka(r) {
 }
 
 // Pomocná funkcia – vráti výsledok kontroly pre riadok
-function getKontrolaResult(row) {
-  if (!row._committed) return null;
+// ── ZASÚVANÉ KRUHOVÉ TVAROVKY – priemer o 3 mm menší ──────────────────────────
+// Tieto tvarovky sa zasúvajú dovnútra rúry, preto sa vyrábajú o 3 mm menšie (1000 → 997).
+// Projektant vo formulári píše menovitý priemer (1000), do Excelu ide o 3 mm menší (997).
+// Poistka: zmenšený priemer zo štandardnej rady (997) je tiež štandard a pri exporte sa znova nezmenšuje.
+// Týka sa len kruhových priemerov tvarovky (stĺpce s typom 'r' v DIM_TYPES), nie dĺžok, uhlov a offsetov.
+const ZASUVNE_PRVKY = ['NASK', 'NASKK', 'SPOK', 'ZSLK', 'ZSLKN', 'OBLK', 'ODK', 'PRKS', 'PRK2',
+                       'ROZK1', 'ROZK2', 'ROZK5', 'ROZK8', 'VYFK'];
+const ZASUV_ODPOCET = 3;
+const KRUH_RADA = [80,100,125,160,200,224,250,280,315,355,400,450,500,560,630,710,800,900,1000,1120,1250,1400,1600,1800];
+const KRUH_RADA_ZASUVNA = KRUH_RADA.map(d => d - ZASUV_ODPOCET);   // 77, 97, 122 … 997 … 1797
+
+// Kruhové priemery zasúvanej tvarovky (napr. ROZK5 → A, E, L); pri ostatných prvkoch prázdne
+function zasuvnePriemery(kod) {
+  if (!ZASUVNE_PRVKY.includes(kod)) return [];
+  const typy = DIM_TYPES[kod] || {};
+  return Object.keys(typy).filter(c => typy[c] === 'r');
+}
+
+// Zmenšený priemer zo štandardnej rady (997) → menovitý (1000); iná hodnota ostáva
+function menovityPriemer(v) {
+  if (v === '' || v == null) return v;
+  const n = +v;
+  return KRUH_RADA_ZASUVNA.includes(n) ? String(n + ZASUV_ODPOCET) : v;
+}
+
+// Riadok s menovitými priemermi – kontrola berie 997 ako 1000 (štandard, porovnania, minimum 80)
+function riadokMenovity(row) {
+  const cols = zasuvnePriemery(row && row.kod);
+  if (!cols.length) return row;
+  let zmena = false;
+  const r = Object.assign({}, row);
+  cols.forEach(c => {
+    const m = menovityPriemer(row[c]);
+    if (m !== row[c]) { r[c] = m; zmena = true; }
+  });
+  return zmena ? r : row;
+}
+
+// Priemer do Excelu: o 3 mm menší; ak už je zmenšený zo štandardnej rady (997), ostáva
+function priemerNaExport(v) {
+  if (v === '' || v == null) return v;
+  const n = +v;
+  if (isNaN(n) || n <= 0) return v;
+  if (KRUH_RADA_ZASUVNA.includes(n)) return n;    // poistka – projektant už priemer zmenšil
+  return n - ZASUV_ODPOCET;
+}
+
+function getKontrolaResult(riadok) {
+  if (!riadok._committed) return null;
+  // Zasúvané kruhové tvarovky: zmenšený priemer zo štandardnej rady (997) sa kontroluje ako menovitý (1000)
+  const row = riadokMenovity(riadok);
   if (!row.kod) return { status: 'CHYBA', text: 'CHYBA – ZADAJTE KÓD' };
 
   // Kontrola počtu – platí pre všetky tvarovky
@@ -3629,7 +3678,7 @@ function render() {
     // First apply autoFill values to model
     if (tv && tv.autoFill) {
       Object.entries(tv.autoFill).forEach(([col, fn]) => {
-        const computed = fn(row);
+        const computed = fn(riadokMenovity(row));
         if (computed !== undefined && computed !== '') {
           rows[idx][col] = String(computed);
         }
@@ -4246,7 +4295,7 @@ function revealDimSuggestion(rowIdx, key, el) {
   if (el && el.value) return; // používateľ už stihol niečo napísať – predvyplnenie ho neprepíše
   const s = row._dimSuggestions[si];
   // Hodnota môže byť aj funkcia – dopočíta sa z už vyplnených polí riadku
-  const val = (typeof s.val === 'function') ? String(s.val(row)) : s.val;
+  const val = (typeof s.val === 'function') ? String(s.val(riadokMenovity(row))) : s.val;
   // Návrh bez hodnoty (napr. z načítaného súboru, kde sa funkcia neuloží) – zahoď ho
   if (val === undefined || val === null) { row._dimSuggestions.splice(si, 1); return; }
   zapisHodnotu(rowIdx, key, val);   // napr. šírka nástavca E z predchádzajúceho riadku → B = E + 100
@@ -4475,7 +4524,10 @@ function getPrevDimValsFor(prevIdx) {
   }
 
   if (outDefs.length === 0) return [];
-  return outDefs.map(d => ({ val: prev[d.col] || '', type: d.type })).filter(d => d.val !== '');
+  // zo zasúvanej tvarovky ide do ďalšieho riadku menovitý priemer (zadané 997 → 1000)
+  const zasuvne = zasuvnePriemery(prev.kod);
+  return outDefs.map(d => ({ val: (zasuvne.includes(d.col) ? menovityPriemer(prev[d.col]) : prev[d.col]) || '', type: d.type }))
+    .filter(d => d.val !== '');
 }
 
 function applyDimSuggestions(row, prevVals) {
@@ -4695,7 +4747,7 @@ function doplnPriPotvrdeni(row) {
   cols.forEach(col => {
     if (row[col] !== '' && row[col] != null) return;
     if (!(col in def)) return;
-    const v = typeof def[col] === 'function' ? def[col](row) : def[col];
+    const v = typeof def[col] === 'function' ? def[col](riadokMenovity(row)) : def[col];
     if (v === undefined || v === null || v === '') return;
     row[col] = String(v);
     doplnene.push(col);
@@ -4761,7 +4813,7 @@ function obnovAutoPolia(idx) {
   const tv = row && TVAROVKY[row.kod];
   if (!tv || !tv.autoFill) return;
   Object.entries(tv.autoFill).forEach(([col, fn]) => {
-    const computed = fn(row);
+    const computed = fn(riadokMenovity(row));
     if (computed !== undefined && computed !== '') row[col] = String(computed);
     const el = document.querySelector(`#table-body input.auto-filled[data-auto-row="${idx}"][data-auto="${col}"]`);
     if (el) el.value = row[col] || '';
@@ -4844,7 +4896,8 @@ function predikciaStav(row) {
   const spec = row && PREDIKCIA[row.kod];
   if (!spec) return null;
   const out = {};
-  Object.entries(spec).forEach(([col, p]) => { out[col] = p.fn(row); });
+  const menovity = riadokMenovity(row);   // zasúvané tvarovky: 997 počíta ako 1000
+  Object.entries(spec).forEach(([col, p]) => { out[col] = p.fn(menovity); });
   return out;
 }
 
@@ -4858,7 +4911,7 @@ function obnovPredikciu(idx, key, predtym) {
     if (col === key || !p.z.some(z => zmenene.has(z))) return;
     const akt = row[col] || '';
     if (akt !== '' && akt !== predtym[col]) return;     // ručne prepísané – nemeníme
-    const nova = p.fn(row);
+    const nova = p.fn(riadokMenovity(row));
     if (nova === akt) return;
     row[col] = nova;
     zmenene.add(col);
@@ -5160,11 +5213,12 @@ async function exportExcel() {
   };
   rows.forEach((row, ri) => {
     const excelRow = 7 + ri;
+    const zasuvne = zasuvnePriemery(row.kod);   // zasúvaná tvarovka → priemer o 3 mm menší (1000 → 997)
     const vals = [
       // počet kusov ako číslo (napísaný počet je v riadku text – v Exceli by bol „číslo uložené ako text“)
       row.pozicia, row.kod, (row.pocKs !== '' && row.pocKs != null && !isNaN(+row.pocKs)) ? +row.pocKs : (row.pocKs || ''),
       ...PARAM_ORDER.map(p => {
-        const v = row[p];
+        const v = zasuvne.includes(p) ? priemerNaExport(row[p]) : row[p];
         return (v !== '' && v !== undefined && v !== null) ? (isNaN(+v) ? v : +v) : '';
       }),
       row.priruba_C1 || '', row.priruba_C2 || '', row.priruba_C3 || '',
