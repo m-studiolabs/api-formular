@@ -5073,6 +5073,267 @@ function updateRowCount() {
   document.getElementById('row-count').textContent = `${rows.length} položiek`;
 }
 
+// ══════════════════════════════════════════════════════
+//  EXPORT PRE CAMDUCT (TXT)
+//  Textový súbor, ktorý CAMduct načíta ako celú zákazku. Formát podľa vzorky z výroby
+//  (78-07-26.TXT): kódovanie Windows-1250, riadky CRLF, hodnoty odsadené dvoma medzerami,
+//  každý kus samostatne (QUANTITY 1), počet kusov pozície v NOTES, PALLET = poradie pozície.
+//  Rozmery A, B, C… idú v poradí ako v appke (písmená sú rovnaké ako v CAMducte), priemery
+//  zasúvaných tvaroviek o 3 mm menšie ako v Exceli. Voľné položky (VOLNA) do TXT nejdú.
+//  Nová knižnica Apiagra 2026 má položky podľa formulára (súbor = kód, napr. PRKS.ITM): rozmery
+//  A, B, C… idú presne ako vo formulári (ako v Exceli), voľby a švy ostávajú podľa položky, spoje
+//  len z prírub zadaných vo formulári. Cesta a názvy súborov sú zatiaľ ODHAD – výroba ich overí.
+//  Stará knižnica Apiagra (vzorka 78-07-26.TXT) ostáva ako záloha: RUS, SPOK, ROZK1, PRKS, OBLK,
+//  RKKR a THK podľa vzorky, ostatné odhad.
+// ══════════════════════════════════════════════════════
+const CAMDUCT_KNIZNICA = 'Apiagra 2026';      // 'Apiagra 2026' (nová) alebo 'Apiagra' (stará, podľa vzorky)
+const CAMDUCT_CESTY = { 'Apiagra 2026': 'K:/CAM/Apiagra 2026/', 'Apiagra': 'K:/CAM/Apiagra/' };
+const CAMDUCT_FIRMA = ['APIAGRA s.r.o.', 'Slanická 36'];
+const CAMDUCT_SPEC = '1000 Pa';
+const CAMDUCT_AUTO = 1000000;                 // rozmer dopočíta CAMduct („Auto“)
+const CAMDUCT_BEZ_TXT = ['VOLNA'];            // do TXT nejde (vyrába sa podľa prílohy)
+const CAMDUCT_MESIACE = ['JANUARY', 'FEBRUARY', 'MARCH', 'APRIL', 'MAY', 'JUNE', 'JULY',
+                         'AUGUST', 'SEPTEMBER', 'OCTOBER', 'NOVEMBER', 'DECEMBER'];
+
+// Šablóny položiek:
+//   itm     – súbor položky v CAMducte (bez cesty a prípony .ITM), text alebo funkcia riadku
+//   dims    – počet rozmerov (inak po posledné písmeno, ktoré prvok vo formulári má)
+//   pevne   – rozmery, ktoré sa neberú z formulára (číslo alebo funkcia riadku)
+//   opts    – voľby (OPTIONS), conns – spoje bez zadanej príruby (počet alebo názvy), seams – švy
+//   druh    – 'plech' (predvolené), 'paska' (spiro), 'nakup' (kupovaný výrobok: bez drôtu a švov)
+//   produkt – názov výrobku (PRODUCT_NAME), order – ORDER_NUMBER
+//   overene – podľa vzorky z výroby; bez neho je to odhad
+const CAMDUCT_ROZK1 = {
+  dims: 11, pevne: { H: CAMDUCT_AUTO, I: 0, J: 90, K: 0 },
+  opts: [1, 1, 0, 0, 0, 1000001, 10, 0, 0, 0, 0, 0, 0, 1000000, 0, 30],
+  conns: ['None', 'None', 'None'], seams: ['SPOJ 0/6', 'SPOJ 0/6'],
+};
+const CAMDUCT_POLOZKY = {
+  // ── podľa vzorky z výroby ──
+  RUS:   { overene: true, itm: 'RU S - Spiro', druh: 'paska', order: '201', dims: 3, pevne: { C: 0 },
+           opts: [0, 0, 0, 0, 0, 0], conns: ['None', 'None'], seams: ['None'] },
+  SPOK:  { overene: true, itm: 'SPO K - Kruhova spojka', dims: 4, pevne: { C: 0, D: r => r.A },
+           opts: [1, 0, 0, 0, 0, 1, 150, 150, 0], conns: ['None', 'None'], seams: ['SPOJ 6/0'] },
+  ROZK1: Object.assign({ overene: true, itm: 'ROZ K1 - Kruhove T-cko rozbocka' }, CAMDUCT_ROZK1),
+  PRKS:  { overene: true, itm: 'PR K1 - Kruhovy prechod', dims: 6, pevne: { D: 1100000, E: 1100000, F: 0 },
+           opts: [0, 0, 1, 1, 0, 0, 0, 0, 90], conns: ['None', 'None'], seams: ['SPOJ 0/6', 'SPOJ 0/6'] },
+  OBLK:  { overene: true, itm: 'OBL K1 - Kruhovy obluk', dims: 5, pevne: { B: 1000001, D: CAMDUCT_AUTO, E: CAMDUCT_AUTO },
+           opts: [4, 0, 1, 0, 0, 0, 0, 0, 0, 3, 0, 1000000, 0, 0, 0, 0, 0, 0, 0],
+           conns: ['FALZ', 'FALZ', 'FALZ'], seams: ['SPOJ 0/6'] },
+  RKKR:  { overene: true, itm: 'RKKR', druh: 'nakup', produkt: r => `RK DN${+r.A} R`, dims: 8,
+           pevne: { A: r => +r.A - 2, B: r => +r.A, C: 45, D: 45, E: r => +r.A + 90, F: 10, G: 50, H: 115 },
+           opts: [0, 0, 0], conns: ['FALZ', 'FALZ'] },
+  RKKS:  { itm: 'RKKS', druh: 'nakup', produkt: r => `RK DN${+r.A} S`, dims: 8,          // odhad: ako RKKR, servo
+           pevne: { A: r => +r.A - 2, B: r => +r.A, C: 45, D: 45, E: r => +r.A + 90, F: 10, G: 50, H: 115 },
+           opts: [0, 0, 0], conns: ['FALZ', 'FALZ'] },
+  THK:   { overene: true, itm: r => `TH K L${+r.B}`, produkt: r => `THK DN${+r.A}/${+r.B}`, dims: 5,
+           pevne: { A: r => +r.A - 2, B: r => (+r.B === 900 ? 0 : 50), C: r => +r.B, D: 50, E: CAMDUCT_AUTO },
+           opts: [0, 1, 0, 3], conns: ['SWAGE', 'SWAGE'], seams: ['LAP'] },
+
+  // ── odhad – kruhové ──
+  RUK:    { itm: 'RU K - Kruhova rura', conns: 2 },
+  NASK:   { itm: 'NAS K - Kruhovy nastavec', conns: 1 },
+  NASKK:  Object.assign({ itm: 'NAS KK - Kruhovy nastavec na kruh' }, CAMDUCT_ROZK1),
+  NASHK:  { itm: 'NAS HK - Hranaty nastavec na kruh', conns: 3 },
+  ODK:    { itm: 'OD K - Kruhovy odskok', dims: 8, pevne: { H: CAMDUCT_AUTO }, conns: 2 },
+  PRK2:   { itm: 'PR K2 - Kruhovy prechod offset', conns: 2 },
+  ROZK2:  { itm: 'ROZ K2 - Kruhova rozbocka 90', conns: 3 },
+  ROZK5:  Object.assign({ itm: 'ROZ K5 - Kruhova rozbocka obojstranna' }, CAMDUCT_ROZK1,
+                        { dims: 14, conns: ['None', 'None', 'None', 'None'] }),
+  ROZK8:  { itm: 'ROZ K8 - Kruhova rozbocka Y', conns: 3 },
+  VYFK:   { itm: 'VYF K - Kruhovy vyfukovy kus', conns: 1 },
+  SPOKV:  { itm: 'SPO KV - Kruhova spojka vonkajsia', dims: 4, pevne: { C: 0, D: r => r.A },
+            opts: [1, 0, 0, 0, 0, 1, 150, 150, 0], conns: ['None', 'None'], seams: ['SPOJ 6/0'] },
+  ZSLK:   { itm: 'ZSL K - Kruhova zaslepka', conns: 1 },
+  ZSLKN:  { itm: 'ZSL KN - Kruhova zaslepka s natrubkom', conns: 1 },
+  // ── odhad – hranaté ──
+  RUH:    { itm: 'RU H - Hranata rura', conns: 2 },
+  RUHD:   { itm: 'RU HD - Hranata rura domerova', conns: 2 },
+  RUHT:   { itm: 'RU HT - Hranata rura tlmic', conns: 2 },
+  KOLH:   { itm: 'KOL H - Hranate koleno', conns: 2 },
+  KOLHPR: { itm: 'KOL HPR - Hranate koleno prechodove', conns: 2 },
+  OBLH:   { itm: 'OBL H - Hranaty obluk', conns: 2 },
+  OBLHPR: { itm: 'OBL HPR - Hranaty obluk prechodovy', conns: 2 },
+  NASH:   { itm: 'NAS H - Hranaty nastavec', conns: 1 },
+  NASHN:  { itm: 'NAS HN - Hranaty nastavec s nabehom', conns: 1 },
+  ODH1:   { itm: 'OD H1 - Hranaty odskok', conns: 2 },
+  ODH2:   { itm: 'OD H2 - Hranaty odskok', conns: 2 },
+  PRH:    { itm: 'PR H - Hranaty prechod', conns: 2 },
+  PRHK:   { itm: 'PR HK - Hranaty prechod na kruh', conns: 2 },
+  ROZH2:  { itm: 'ROZ H2 - Hranata rozbocka radiusova', conns: 3 },
+  ROZH6:  { itm: 'ROZ H6 - Hranata rozbocka', pevne: { E: CAMDUCT_AUTO }, conns: 3 },
+  ROZH7:  { itm: 'ROZ H7 - Hranata rozbocka nohavice', conns: 3 },
+  ROZH10: { itm: 'ROZ H10 - Hranata rura s hranatym nastavcom', conns: 3 },
+  VYFH:   { itm: 'VYF H - Hranaty vyfukovy kus', conns: 1 },
+  ZSLH:   { itm: 'ZSL H - Hranata zaslepka', conns: 1 },
+  ZSLHP:  { itm: 'ZSL HP - Hranata zaslepka s prirubou', conns: 1 },
+  // ── odhad – príslušenstvo ──
+  LISTA20: { itm: 'LISTA 20', conns: 0 },
+  LISTA30: { itm: 'LISTA 30', conns: 0 },
+  P20:     { itm: 'P 20 - Priruba', conns: 0 },
+  P30:     { itm: 'P 30 - Priruba', conns: 0 },
+  ROH20:   { itm: 'ROH 20 - Rohovnik', conns: 0 },
+  ROH30:   { itm: 'ROH 30 - Rohovnik', conns: 0 },
+};
+
+// Nová knižnica: súbor = kód, rozmery z formulára, voľby a švy podľa položky, spoje len zo zadaných prírub
+function camductSablonaNova(kod) {
+  const stara = camductSablona(kod);
+  return { itm: kod, druh: stara.druh, produkt: stara.produkt, order: stara.order, nova: true };
+}
+
+// Šablóna prvku (stará knižnica); technológia bez vlastnej šablóny = kupovaný výrobok so súborom podľa kódu
+function camductSablona(kod) {
+  if (CAMDUCT_POLOZKY[kod]) return CAMDUCT_POLOZKY[kod];
+  if (KodSorter.isTech(kod)) {
+    return { itm: kod, druh: 'nakup', conns: 2, produkt: r => `${kod} ${camductRozmerText(kod, r)}` };
+  }
+  return { itm: kod, conns: 2 };
+}
+
+// „DN160“ pri kruhovom, „500x400“ pri hranatom prvku (do názvu výrobku)
+function camductRozmerText(kod, r) {
+  const typy = DIM_TYPES[kod] || {};
+  const kruh = Object.keys(typy).find(c => typy[c] === 'r');
+  if (kruh && r[kruh]) return `DN${+r[kruh]}`;
+  return [r.A, r.B].filter(v => v !== '' && v != null).map(v => +v).join('x');
+}
+
+// Hrúbka plechu – ODHAD (vzorka: spiro do ⌀200 = 0,5; kruhové tvarovky do ⌀200 = 0,6)
+function camductHrubka(kod, r, s) {
+  if (s.druh === 'nakup') return 0;
+  const typy = DIM_TYPES[kod] || {};
+  const rozmery = Object.keys(typy).map(c => +r[c] || 0);
+  const max = rozmery.length ? Math.max(...rozmery) : 0;
+  if (s.druh === 'paska') return max <= 250 ? 0.5 : max <= 500 ? 0.6 : max <= 800 ? 0.8 : max <= 1250 ? 1 : 1.25;
+  return max <= 500 ? 0.6 : max <= 1000 ? 0.8 : max <= 2000 ? 1 : 1.25;
+}
+
+// Rozmery položky: A, B, C… z formulára (zasúvané tvarovky o 3 mm menšie), pevné podľa šablóny
+function camductRozmery(kod, row, s) {
+  const zasuvne = zasuvnePriemery(kod);
+  const r = Object.assign({}, row);
+  zasuvne.forEach(c => { if (r[c] !== '' && r[c] != null) r[c] = String(priemerNaExport(r[c])); });
+  const tv = TVAROVKY[kod] || {};
+  const pevne = s.pevne || {};
+  let pocet = s.dims;
+  if (!pocet) {
+    const pismena = [...Object.keys(tv.params || {}), ...Object.keys(tv.autoFill || {}), ...Object.keys(pevne)];
+    pocet = pismena.length ? Math.max(...pismena.map(c => PARAM_COLS.indexOf(c))) + 1 : 0;
+  }
+  const out = [];
+  for (let i = 0; i < pocet; i++) {
+    const c = PARAM_COLS[i];
+    let v = (c in pevne) ? pevne[c] : r[c];
+    if (typeof v === 'function') v = v(r);
+    const n = (v === '' || v == null) ? 0 : +v;
+    out.push(isNaN(n) ? '0.00' : n.toFixed(2));
+  }
+  return out;
+}
+
+// Spoje: zadané príruby C1, C2, C3 v poradí, inak predvolené zo šablóny.
+// Nová knižnica: len zadané príruby (po poslednú zadanú, medzery „None“); bez prírub nič – ostane nastavenie položky.
+function camductSpoje(row, s) {
+  if (s.nova) {
+    const p = [row.priruba_C1, row.priruba_C2, row.priruba_C3];
+    let posledna = -1;
+    p.forEach((x, i) => { if (x) posledna = i; });
+    return p.slice(0, posledna + 1).map(x => x || 'None');
+  }
+  const pred = Array.isArray(s.conns) ? s.conns.slice() : Array(s.conns == null ? 2 : s.conns).fill('None');
+  ['priruba_C1', 'priruba_C2', 'priruba_C3'].forEach((k, i) => {
+    if (i < pred.length && row[k]) pred[i] = row[k];
+  });
+  return pred;
+}
+
+function camductText(t) {
+  return String(t == null ? '' : t).replace(/[\r\n\t]+/g, ' ').trim();
+}
+
+// Celý TXT pre CAMduct (riadky CRLF; na bajty ho prevedie doCp1250)
+function camductTxt(riadky, hlavicka) {
+  const L = [];
+  const k = (kluc) => L.push(kluc);
+  const v = (hodnota) => L.push('  ' + hodnota);
+  const d = hlavicka.datum || new Date();
+  const zakazka = camductText(hlavicka.zakazka);
+  const [pole1, pole2] = zakazka.includes('/') ? zakazka.split('/', 2) : [zakazka, ''];
+  const zariadenie = camductText(hlavicka.zariadenie);
+  const kniznica = hlavicka.kniznica || CAMDUCT_KNIZNICA;
+  const cesta = CAMDUCT_CESTY[kniznica] || CAMDUCT_CESTY[CAMDUCT_KNIZNICA];
+  const nova = kniznica !== 'Apiagra';
+
+  k('JOBHEADER_START');
+  k('JOB_NAME'); v(camductText(hlavicka.cislo) || camductText(hlavicka.zaklad));
+  k('JOB_REFERENCE'); v(zariadenie);
+  k('JOB_DATE'); v(`${d.getDate()}. ${d.getMonth() + 1}. ${d.getFullYear()}`);
+  k('COMPANYADDRESS_START'); CAMDUCT_FIRMA.forEach(v); k('COMPANYADDRESS_END');
+  k('PROJECTAREA_START'); v(String(d.getFullYear())); v(CAMDUCT_MESIACE[d.getMonth()]); k('PROJECTAREA_END');
+  k('ARCHIVE'); v('OFF');
+  k('FIELD1'); v(pole1.trim());
+  k('FIELD2'); v(pole2.trim());
+  k('JOBHEADER_END');
+
+  let paleta = 0;
+  riadky.forEach((row, ri) => {
+    if (!row.kod || CAMDUCT_BEZ_TXT.includes(row.kod) || !TVAROVKY[row.kod]) return;
+    const s = nova ? camductSablonaNova(row.kod) : camductSablona(row.kod);
+    paleta++;
+    const nakup = s.druh === 'nakup';
+    const itm = typeof s.itm === 'function' ? s.itm(row) : s.itm;
+    const produkt = s.produkt ? s.produkt(row) : '';
+    const ks = Math.max(1, parseInt(row.pocKs, 10) || 1);
+    const rozmery = camductRozmery(row.kod, row, s);
+    const spoje = camductSpoje(row, s);
+    const hrubka = camductHrubka(row.kod, row, s);
+    for (let i = 0; i < ks; i++) {
+      k('ITEM_START');
+      k('ITEMHEADER_START');
+      k('ITEMFILE'); v(cesta + itm + '.ITM');
+      if (produkt) { k('PRODUCT_NAME'); v(camductText(produkt)); }
+      k('ITEM_NUMBER'); v(camductText(row.pozicia) || String(ri + 1));
+      k('SPEC'); v(nakup ? 'Not Set' : CAMDUCT_SPEC);
+      k('MATERIAL'); v(s.druh === 'paska' ? 'Zinkova paska' : 'Zinkovany plech');
+      k('GAUGE'); v(String(hrubka));
+      if (!nakup) { k('WIRE_GAUGE'); v('24'); }
+      k('QUANTITY'); v('1');
+      k('ROTARY'); v('0');
+      k('LATHE'); v('0');
+      k('DOUBLEWALL'); v('OFF');
+      k('NOTES'); v(String(ks));
+      k('ORDER_NUMBER'); v(s.order || '');
+      k('PALLET'); v(String(paleta));
+      k('BOX'); v('0');
+      k('NEST_PRIORITY'); v('0');
+      k('SERVICE_NAME'); v('None');
+      k('ITEMHEADER_END');
+      k('CUSTOM_DATA_START'); v('Zariadenie=' + zariadenie); k('CUSTOM_DATA_END');
+      k('DIMS_START'); rozmery.forEach(v); k('DIMS_END');
+      k('OPTIONS_START'); (s.opts || []).forEach(o => v((+o).toFixed(2))); k('OPTIONS_END');
+      k('CONNS_START'); spoje.forEach(v); k('CONNS_END');
+      if (!nakup) { k('SEAMS_START'); (s.seams || []).forEach(v); k('SEAMS_END'); }
+      k('ITEM_END');
+    }
+  });
+  return L.join('\r\n');
+}
+
+// Text → bajty vo Windows-1250 (ako vzorka z výroby); znak mimo tabuľky → „?“
+const CP1250_HORNA = '€\uFFFF‚\uFFFF„…†‡\uFFFF‰Š‹ŚŤŽŹ\uFFFF‘’“”•–—\uFFFF™š›śťžź\u00A0ˇ˘Ł¤Ą¦§¨©Ş«¬\u00AD®Ż°±˛ł´µ¶·¸ąş»Ľ˝ľżŔÁÂĂÄĹĆÇČÉĘËĚÍÎĎĐŃŇÓÔŐÖ×ŘŮÚŰÜÝŢßŕáâăäĺćçčéęëěíîďđńňóôőö÷řůúűüýţ˙';
+function doCp1250(text) {
+  const znaky = Array.from(text);
+  const out = new Uint8Array(znaky.length);
+  znaky.forEach((z, i) => {
+    const c = z.codePointAt(0);
+    if (c < 0x80) { out[i] = c; return; }
+    const j = CP1250_HORNA.indexOf(z);
+    out[i] = j >= 0 ? 0x80 + j : 0x3F;
+  });
+  return out;
+}
+
 // ── EXPORT ─────────────────────────────────────────
 // Logo APIAGRA do hlavičky exportu (farebné, na biely papier) – PNG 116 × 63 px
 const EXPORT_LOGO_PNG = 'data:image/png;base64,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';
@@ -5211,8 +5472,12 @@ async function exportExcel() {
     const priloha = nazvy.length ? (nazvy.length === 1 ? 'Príloha: ' : 'Prílohy: ') + nazvy.join(', ') : '';
     return [row.poznamka || '', priloha].filter(Boolean).join('\n');
   };
-  rows.forEach((row, ri) => {
-    const excelRow = 7 + ri;
+  // Voľné položky (VOLNA) idú v Exceli vždy na koniec zoznamu – vo formulári môžu byť hocikde v trase.
+  // Ostatné riadky aj voľné položky medzi sebou si nechajú poradie z formulára (ri = index vo formulári).
+  const poradieExportu = rows.map((row, ri) => ({ row, ri }));
+  poradieExportu.sort((a, b) => ((a.row.kod === 'VOLNA') - (b.row.kod === 'VOLNA')) || (a.ri - b.ri));
+  poradieExportu.forEach(({ row, ri }, ei) => {
+    const excelRow = 7 + ei;
     const zasuvne = zasuvnePriemery(row.kod);   // zasúvaná tvarovka → priemer o 3 mm menší (1000 → 997)
     const vals = [
       // počet kusov ako číslo (napísaný počet je v riadku text – v Exceli by bol „číslo uložené ako text“)
@@ -5290,30 +5555,30 @@ async function exportExcel() {
   const buf = await wb.xlsx.writeBuffer();
   const xlsxBlob = new Blob([buf], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
 
-  // Bez príloh – len Excel ako doteraz
-  if (prilohyExport.length === 0) {
-    stiahniSubor(xlsxBlob, fname);
-    toast(`Súbor ${fname} bol stiahnutý`, 'ok');
-    markClean();
-    return;
-  }
+  // TXT pre CAMduct (bez voľných položiek), kódovanie Windows-1250 ako vzorka z výroby
+  const txtNazov = `${zaklad}.TXT`;
+  const txtBajty = doCp1250(camductTxt(rows, { zakazka, zariadenie, cislo, zaklad }));
+  const txtBlob = new Blob([txtBajty], { type: 'text/plain' });
 
-  // S prílohami voľných položiek – jeden ZIP: Excel + priečinok Prilohy (pozícia_súbor)
+  // Jeden ZIP: Excel + TXT pre CAMduct + priečinok Prilohy (pozícia_súbor), ak sú prílohy
   const n = prilohyExport.length;
+  const sPrilohami = n ? ` + ${n} ${slovoPrilohy(n)}` : '';
   if (typeof JSZip === 'undefined') {
     // knižnica na ZIP sa nenačítala → súbory sa stiahnu jednotlivo
     stiahniSubor(xlsxBlob, fname);
-    prilohyExport.forEach((e, i) => setTimeout(() => stiahniSubor(prilohaBlob(e.priloha), e.nazov), 400 * (i + 1)));
-    toast(`Stiahnutý Excel a ${n} ${slovoPrilohy(n)} (jednotlivo, ZIP nie je dostupný)`, 'ok');
+    setTimeout(() => stiahniSubor(txtBlob, txtNazov), 400);
+    prilohyExport.forEach((e, i) => setTimeout(() => stiahniSubor(prilohaBlob(e.priloha), e.nazov), 400 * (i + 2)));
+    toast(`Stiahnutý Excel a TXT pre CAMduct${sPrilohami} (jednotlivo, ZIP nie je dostupný)`, 'ok');
     markClean();
     return;
   }
   const zip = new JSZip();
   zip.file(fname, buf);
+  zip.file(txtNazov, txtBajty);
   prilohyExport.forEach(e => zip.file('Prilohy/' + e.nazov, e.priloha.data, { base64: true }));
   const zipBlob = await zip.generateAsync({ type: 'blob', mimeType: 'application/zip' });
   stiahniSubor(zipBlob, `${zaklad}.zip`);
-  toast(`Súbor ${zaklad}.zip bol stiahnutý (Excel + ${n} ${slovoPrilohy(n)})`, 'ok');
+  toast(`Súbor ${zaklad}.zip bol stiahnutý (Excel + TXT pre CAMduct${sPrilohami})`, 'ok');
   markClean();
 }
 
