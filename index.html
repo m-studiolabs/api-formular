@@ -5080,14 +5080,15 @@ function updateRowCount() {
 //  každý kus samostatne (QUANTITY 1), počet kusov pozície v NOTES, PALLET = poradie pozície.
 //  Rozmery A, B, C… idú v poradí ako v appke (písmená sú rovnaké ako v CAMducte), priemery
 //  zasúvaných tvaroviek o 3 mm menšie ako v Exceli. Voľné položky (VOLNA) do TXT nejdú.
-//  Nová knižnica Apiagra 2026 má položky podľa formulára (súbor = kód, napr. PRKS.ITM): rozmery
+//  Nová knižnica Apiagra 2026 má položky podľa formulára v priečinku K:\CAM\API STANDARD\
+//  (súbor = kód, napr. K:\CAM\API STANDARD\RUH.ITM – potvrdila výroba 24. 11. 2026): rozmery
 //  A, B, C… idú presne ako vo formulári (ako v Exceli), voľby a švy ostávajú podľa položky, spoje
-//  len z prírub zadaných vo formulári. Cesta a názvy súborov sú zatiaľ ODHAD – výroba ich overí.
+//  len z prírub zadaných vo formulári.
 //  Stará knižnica Apiagra (vzorka 78-07-26.TXT) ostáva ako záloha: RUS, SPOK, ROZK1, PRKS, OBLK,
 //  RKKR a THK podľa vzorky, ostatné odhad.
 // ══════════════════════════════════════════════════════
 const CAMDUCT_KNIZNICA = 'Apiagra 2026';      // 'Apiagra 2026' (nová) alebo 'Apiagra' (stará, podľa vzorky)
-const CAMDUCT_CESTY = { 'Apiagra 2026': 'K:/CAM/Apiagra 2026/', 'Apiagra': 'K:/CAM/Apiagra/' };
+const CAMDUCT_CESTY = { 'Apiagra 2026': 'K:/CAM/API STANDARD/', 'Apiagra': 'K:/CAM/Apiagra/' };   // lomky „/“ ako vo vzorke z výroby
 const CAMDUCT_FIRMA = ['APIAGRA s.r.o.', 'Slanická 36'];
 const CAMDUCT_SPEC = '1000 Pa';
 const CAMDUCT_AUTO = 1000000;                 // rozmer dopočíta CAMduct („Auto“)
