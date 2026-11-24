@@ -999,7 +999,6 @@ const TVAROVKY = {
       E: () => 30,
       H: () => 30,
       I: () => 30,
-      L: (r) => r.C,
     },
     priruba: true,
   },
@@ -1106,7 +1105,6 @@ const TVAROVKY = {
     autoFill: {
       G: () => 30,
       H: () => 50,
-      L: (r) => r.D,
     },
     priruba: true,
   },
@@ -2560,6 +2558,7 @@ const KONTROLA = {
 
   // ─── PRHK ────────────────────────────────────────
   // Vždy ATYP – prechod hranatý na kruh je vždy atypový prvok
+  // Nedá sa vyrobiť: dĺžka D menšia ako 250.
   PRHK: {
     check(r) {
       if (!r.A && !r.B && !r.C && !r.D) return null;
@@ -2569,6 +2568,7 @@ const KONTROLA = {
       if (!r.C) missing.push('C');
       if (!r.D) missing.push('D');
       if (missing.length > 0) return { status: 'CHYBA', text: `CHYBA – ZADAJTE ${missing.join(', ')}` };
+      if (+r.D < 250) return { status: 'CHYBA', text: 'NIE JE MOŽNÉ VYROBIŤ: DĹŽKA D MUSÍ BYŤ MIN. 250' };
       return { status: 'ATYP', text: 'ATYP – PRVOK' };
     }
   },
@@ -3518,15 +3518,20 @@ function checkTlmicovaVlozka(r) {
 // Projektant vo formulári píše menovitý priemer (1000), do Excelu ide o 3 mm menší (997).
 // Poistka: zmenšený priemer zo štandardnej rady (997) je tiež štandard a pri exporte sa znova nezmenšuje.
 // Týka sa len kruhových priemerov tvarovky (stĺpce s typom 'r' v DIM_TYPES), nie dĺžok, uhlov a offsetov.
+// Výnimky v ZASUVNE_LEN: zmenšujú sa len vymenované priemery, ostatné ostávajú podľa formulára.
 const ZASUVNE_PRVKY = ['NASK', 'NASKK', 'SPOK', 'ZSLK', 'ZSLKN', 'OBLK', 'ODK', 'PRKS', 'PRK2',
                        'ROZK1', 'ROZK2', 'ROZK5', 'ROZK8', 'VYFK'];
+const ZASUVNE_LEN = {
+  NASKK: ['E'],   // nástavec ⌀E sa zasúva (100 → 97); rúra ⌀A, na ktorej sedí, ostáva (100 → 100)
+};
 const ZASUV_ODPOCET = 3;
 const KRUH_RADA = [80,100,125,160,200,224,250,280,315,355,400,450,500,560,630,710,800,900,1000,1120,1250,1400,1600,1800];
 const KRUH_RADA_ZASUVNA = KRUH_RADA.map(d => d - ZASUV_ODPOCET);   // 77, 97, 122 … 997 … 1797
 
-// Kruhové priemery zasúvanej tvarovky (napr. ROZK5 → A, E, L); pri ostatných prvkoch prázdne
+// Kruhové priemery zasúvanej tvarovky (napr. ROZK5 → A, E, L; NASKK → len E); pri ostatných prvkoch prázdne
 function zasuvnePriemery(kod) {
   if (!ZASUVNE_PRVKY.includes(kod)) return [];
+  if (ZASUVNE_LEN[kod]) return ZASUVNE_LEN[kod].slice();
   const typy = DIM_TYPES[kod] || {};
   return Object.keys(typy).filter(c => typy[c] === 'r');
 }
@@ -3560,7 +3565,54 @@ function priemerNaExport(v) {
   return n - ZASUV_ODPOCET;
 }
 
+// ── POZÍCIA MUSÍ BYŤ JEDINEČNÁ ────────────────────────────────────────────────
+// Rovnaká pozícia vo viacerých riadkoch je CHYBA: ukáže sa v riadku (aj červené pole pozície),
+// v zozname chýb pri tlačidle Overiť a zablokuje export. Porovnáva sa bez medzier na okrajoch
+// a bez ohľadu na veľké/malé písmená („v001 “ = „V001“). Prázdna pozícia sa nekontroluje.
+function klucPozicie(p) {
+  return String(p == null ? '' : p).trim().replace(/\s+/g, ' ').toUpperCase();
+}
+
+// Pozícia → čísla riadkov; prepočíta sa, len keď sa zmenia riadky alebo pozície
+let _pozicieCache = null;
+function mapaPozicii() {
+  const c = _pozicieCache;
+  if (c && c.rows === rows && c.raw.length === rows.length && rows.every((r, i) => r.pozicia === c.raw[i])) return c.mapa;
+  const mapa = new Map();
+  rows.forEach((r, i) => {
+    const k = klucPozicie(r.pozicia);
+    if (!k) return;
+    if (!mapa.has(k)) mapa.set(k, []);
+    mapa.get(k).push(i + 1);
+  });
+  _pozicieCache = { rows, raw: rows.map(r => r.pozicia), mapa };
+  return mapa;
+}
+
+// Čísla ostatných riadkov s rovnakou pozíciou (prázdne pole = pozícia je jedinečná)
+function ineRiadkySPoziciou(riadok) {
+  const k = klucPozicie(riadok && riadok.pozicia);
+  if (!k) return [];
+  const cislo = rows.indexOf(riadok) + 1;
+  return (mapaPozicii().get(k) || []).filter(n => n !== cislo);
+}
+
+function textRiadkov(ine) {
+  return (ine.length > 1 ? 'riadky ' : 'riadok ') + ine.join(', ');
+}
+
 function getKontrolaResult(riadok) {
+  const vysledok = kontrolaPrvku(riadok);
+  if (!riadok._committed || (vysledok && vysledok.status === 'CHYBA')) return vysledok;
+  const ine = ineRiadkySPoziciou(riadok);
+  if (ine.length) {
+    return { status: 'CHYBA', text: `CHYBA – POZÍCIA ${String(riadok.pozicia).trim()} SA OPAKUJE (AJ ${textRiadkov(ine).toUpperCase()})` };
+  }
+  return vysledok;
+}
+
+// Kontrola samotného prvku (rozmery, počet, kód…)
+function kontrolaPrvku(riadok) {
   if (!riadok._committed) return null;
   // Zasúvané kruhové tvarovky: zmenšený priemer zo štandardnej rady (997) sa kontroluje ako menovitý (1000)
   const row = riadokMenovity(riadok);
@@ -3637,14 +3689,16 @@ function render() {
 
     tr.innerHTML = `<td class="col-num">${idx+1}</td>`;
 
-    // Pozícia
+    // Pozícia (rovnaká pozícia vo viacerých riadkoch → červené pole s bublinou)
     const tiPozicia = tiCounter++;
+    const pozIne = row._committed ? ineRiadkySPoziciou(row) : [];
     tr.innerHTML += `<td><div class="err-wrap">
-      <input class="cell-input" type="text" value="${row.pozicia||''}"
+      <input class="cell-input ${pozIne.length ? 'invalid' : ''}" type="text" value="${row.pozicia||''}"
         placeholder="napr. M.1NP.Z6.V001" style="min-width:98px;" maxlength="15"
         data-ti="${tiPozicia}" data-row="${idx}" data-key="pozicia"
         onchange="setCell(${idx},'pozicia',this.value)"
         onkeydown="handleKey(event,${idx},'pozicia')">
+      ${pozIne.length ? `<div class="err-tip">Pozícia sa opakuje – aj ${textRiadkov(pozIne)}</div>` : ''}
     </div></td>`;
 
     // Kód – autocomplete input
@@ -3690,6 +3744,8 @@ function render() {
       const isAuto = tv && tv.autoFill && tv.autoFill[col];
 
       if (!pDef && !isAuto) {
+        // prvok tento stĺpec nemá – stará hodnota (napr. z uloženej rozpisky) nesmie ísť do Excelu ani TXT
+        if (tv && rows[idx][col]) rows[idx][col] = '';
         tr.innerHTML += `<td><input class="cell-input" disabled style="width:46px" value="–"></td>`;
       } else if (isAuto) {
         // Auto-filled readonly cell
@@ -4947,6 +5003,30 @@ function setCell(idx, key, value) {
       rebuildPrirubaSelect(el, value);
     }
   }
+  if (key === 'pozicia') obnovDuplicityPozicii();
+}
+
+// Po zmene pozície: stav všetkých riadkov (aj druhého riadku s rovnakou pozíciou) bez prekreslenia tabuľky
+function obnovDuplicityPozicii() {
+  rows.forEach((row, i) => updateAtypBadge(i));
+  updateStats();
+}
+
+// Pole pozície riadku: červené s bublinou, ak je rovnaká pozícia aj v inom riadku
+function oznacPoziciu(idx) {
+  const row = rows[idx];
+  const el = document.querySelector(`#table-body [data-row="${idx}"][data-key="pozicia"]`);
+  if (!row || !el) return;
+  const ine = row._committed ? ineRiadkySPoziciou(row) : [];
+  el.classList.toggle('invalid', ine.length > 0);
+  const wrap = el.parentElement;
+  let tip = wrap.querySelector('.err-tip');
+  if (ine.length) {
+    if (!tip) { tip = document.createElement('div'); tip.className = 'err-tip'; wrap.appendChild(tip); }
+    tip.textContent = `Pozícia sa opakuje – aj ${textRiadkov(ine)}`;
+  } else if (tip) {
+    tip.remove();
+  }
 }
 
 function rebuildPrirubaSelect(sel, v) {
@@ -4966,8 +5046,10 @@ function updateAtypBadge(idx) {
   const kontrola = getKontrolaResult(row);
   const tr = document.querySelectorAll('#table-body tr')[idx];
   if (!tr) return;
+  oznacPoziciu(idx);
   // Update row background classes
   tr.classList.remove('row-atyp', 'row-chyba', 'row-ok');
+  tr.classList.toggle('has-error', !!(row._committed && kontrola && kontrola.status === 'CHYBA'));
   if (row._committed && kontrola) {
     if (kontrola.status === 'ATYP')  tr.classList.add('row-atyp');
     if (kontrola.status === 'CHYBA') tr.classList.add('row-chyba');
