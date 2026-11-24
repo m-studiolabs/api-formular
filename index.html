@@ -180,7 +180,7 @@
   .header-form-body.hidden { display: none; }
   .form-grid {
     display: grid;
-    grid-template-columns: 2fr 3fr 1fr 1fr;
+    grid-template-columns: 1fr 2fr 3fr 1fr;     /* číslo zákazky · stavba · zariadenie · tesnosť */
     gap: 14px;
   }
   .form-group { display: flex; flex-direction: column; gap: 5px; }
@@ -644,8 +644,12 @@
     <div class="header-form-body" id="header-form-body">
       <div class="form-grid">
         <div class="form-group">
-          <label>Číslo zákazky / stavba</label>
+          <label>Číslo zákazky</label>
           <input type="text" id="h-zakazka" placeholder="napr. 5345/00" oninput="headerChanged()">
+        </div>
+        <div class="form-group">
+          <label>Stavba</label>
+          <input type="text" id="h-stavba" placeholder="napr. ZWIRN" oninput="headerChanged()">
         </div>
         <div class="form-group">
           <label>Zariadenie</label>
@@ -660,10 +664,6 @@
             <option value="C">C</option>
             <option value="E600120(ho)S1500single">E600120(ho)S1500single</option>
           </select>
-        </div>
-        <div class="form-group">
-          <label>Číslo rozpisky</label>
-          <input type="text" id="h-cislo" placeholder="napr. R-001" oninput="headerChanged()">
         </div>
       </div>
     </div>
@@ -5070,9 +5070,10 @@ function toggleHeader() {
 
 function headerChanged() {
   const zakazka = document.getElementById('h-zakazka').value;
+  const stavba = document.getElementById('h-stavba').value;
   const zariadenie = document.getElementById('h-zariadenie').value;
   const tesnost = document.getElementById('h-tesnost').value;
-  const parts = [zakazka, zariadenie, tesnost].filter(Boolean);
+  const parts = [zakazka, stavba, zariadenie, tesnost].filter(Boolean);
   document.getElementById('hf-summary').textContent = parts.join('  ·  ');
 }
 
@@ -5349,7 +5350,7 @@ function camductTxt(riadky, hlavicka) {
   const nova = kniznica !== 'Apiagra';
 
   k('JOBHEADER_START');
-  k('JOB_NAME'); v(camductText(hlavicka.cislo) || camductText(hlavicka.zaklad));
+  k('JOB_NAME'); v(camductText(hlavicka.cislo) || camductText(hlavicka.zaklad));   // číslo rozpisky sa už nezadáva → názov súboru (cislo len pre test so vzorkou)
   k('JOB_REFERENCE'); v(zariadenie);
   k('JOB_DATE'); v(`${d.getDate()}. ${d.getMonth() + 1}. ${d.getFullYear()}`);
   k('COMPANYADDRESS_START'); CAMDUCT_FIRMA.forEach(v); k('COMPANYADDRESS_END');
@@ -5429,9 +5430,9 @@ async function exportExcel() {
   if (!validateAll()) return;
 
   const zakazka    = document.getElementById('h-zakazka').value;
+  const stavba     = document.getElementById('h-stavba').value.trim();
   const zariadenie = document.getElementById('h-zariadenie').value;
   const tesnost    = document.getElementById('h-tesnost').value;
-  const cislo      = document.getElementById('h-cislo').value;
 
   const wb = new ExcelJS.Workbook();
   const ws = wb.addWorksheet('rozpis potrubia');
@@ -5489,7 +5490,7 @@ async function exportExcel() {
   const widths = [21, 12, 5.43,  ...Array(15).fill(5.71),  4.86, 4.86, 4.86,  13.29];
   widths.forEach((w, i) => { ws.getColumn(i + 1).width = w; });
 
-  // ── RIADOK 1–2 – logo, číslo zákazky, nadpis, tesnosť, číslo rozpisky ──
+  // ── RIADOK 1–2 – logo, číslo zákazky, nadpis, tesnosť, stavba ──
   ws.mergeCells('A1:A2');   // logo
   ws.mergeCells('B1:E1');
   ws.mergeCells('B2:E2');
@@ -5499,14 +5500,17 @@ async function exportExcel() {
   ws.mergeCells('S1:V1');
   ws.mergeCells('S2:V2');
   setCell('A1', '');
-  setCell('B1', 'Číslo zákazky / stavba:');
+  setCell('B1', 'Číslo zákazky:');
   setCell('F1', 'ROZPIS POTRUBIA', { size: 16, bold: true });
   setCell('P1', 'Tesnosť:');
-  setCell('S1', 'Číslo rozpisky:');
+  setCell('S1', 'Stavba:');
   // hodnoty hlavičky – dlhšia hodnota sa zalomí na 2 riadky (napr. tesnosť E600120(ho)S1500single)
   setCell('B2', zakazka, { size: 14, bold: true });
   setCell('P2', tesnost, { size: 14, bold: true });
-  setCell('S2', cislo,   { size: 14, bold: true });
+  // stavba (S2:V2 ≈ 20 znakov na riadok pri 14 b): do 2 riadkov 14 b, dlhšia 12 b a pri viac ako 2 riadkoch vyšší riadok 2
+  const stavbaVelka = pocetRiadkov(stavba, 20) <= 2;
+  const vyskaRiadku2 = stavbaVelka ? 36 : Math.max(36, pocetRiadkov(stavba, 25) * 15.75 + 6);
+  setCell('S2', stavba, { size: stavbaVelka ? 14 : 12, bold: true });
 
   // Logo APIAGRA v ľavom hornom rohu (A1:A2), vycentrované
   try {
@@ -5592,7 +5596,7 @@ async function exportExcel() {
 
   // ── VÝŠKY RIADKOV ────────────────────────────────────
   ws.getRow(1).height = 22;
-  ws.getRow(2).height = 36;
+  ws.getRow(2).height = vyskaRiadku2;   // 36, pri dlhom názve stavby vyšší (celý sa zmestí)
   ws.getRow(3).height = 17;
   ws.getRow(4).height = 17;
   ws.getRow(5).height = 18;
@@ -5640,7 +5644,7 @@ async function exportExcel() {
 
   // TXT pre CAMduct (bez voľných položiek), kódovanie Windows-1250 ako vzorka z výroby
   const txtNazov = `${zaklad}.TXT`;
-  const txtBajty = doCp1250(camductTxt(rows, { zakazka, zariadenie, cislo, zaklad }));
+  const txtBajty = doCp1250(camductTxt(rows, { zakazka, zariadenie, zaklad }));
   const txtBlob = new Blob([txtBajty], { type: 'text/plain' });
 
   // Jeden ZIP: Excel + TXT pre CAMduct + priečinok Prilohy (pozícia_súbor), ak sú prílohy
@@ -5827,7 +5831,7 @@ function clearAll() {
   if (!confirm('Naozaj vymazať celý formulár?')) return;
   rows = [];
   rowCounter = 0;
-  ['h-zakazka','h-zariadenie','h-cislo'].forEach(id => document.getElementById(id).value='');
+  ['h-zakazka','h-stavba','h-zariadenie'].forEach(id => document.getElementById(id).value='');
   document.getElementById('h-tesnost').value='';
   document.getElementById('val-summary').style.display='none';
   render();
@@ -6286,9 +6290,9 @@ function collectState() {
   return {
     header: {
       zakazka: document.getElementById('h-zakazka').value,
+      stavba: document.getElementById('h-stavba').value,
       zariadenie: document.getElementById('h-zariadenie').value,
       tesnost: document.getElementById('h-tesnost').value,
-      cislo: document.getElementById('h-cislo').value,
     },
     rows: rows,
     rowCounter: rowCounter,
@@ -6331,9 +6335,9 @@ function sanitizeRows(list) {
 function applyState(data) {
   if (data.header) {
     document.getElementById('h-zakazka').value = data.header.zakazka || '';
+    document.getElementById('h-stavba').value = data.header.stavba || '';
     document.getElementById('h-zariadenie').value = data.header.zariadenie || '';
     document.getElementById('h-tesnost').value = data.header.tesnost || '';
-    document.getElementById('h-cislo').value = data.header.cislo || '';
   }
   rows = sanitizeRows(data.rows);
   rowCounter = data.rowCounter || rows.length;
@@ -6351,7 +6355,7 @@ function rowHasContent(r) {
 function stateHasContent(state) {
   if (!state) return false;
   const h = state.header || {};
-  if ([h.zakazka, h.zariadenie, h.tesnost, h.cislo].some(v => v && String(v).trim() !== '')) return true;
+  if ([h.zakazka, h.stavba, h.zariadenie, h.tesnost].some(v => v && String(v).trim() !== '')) return true;
   return (state.rows || []).some(rowHasContent);
 }
 
@@ -6489,8 +6493,8 @@ function showRestorePrompt(rec) {
   const info = overlay.querySelector('#restore-info');
   const lines = [];
   if (h.zakazka)    lines.push(['Zákazka', h.zakazka]);
+  if (h.stavba)     lines.push(['Stavba', h.stavba]);
   if (h.zariadenie) lines.push(['Zariadenie', h.zariadenie]);
-  if (h.cislo)      lines.push(['Číslo rozpisky', h.cislo]);
   lines.push(['Počet položiek', String(pocet)]);
   lines.forEach(([k, v]) => {
     const line = document.createElement('div');
