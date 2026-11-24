@@ -5490,27 +5490,31 @@ async function exportExcel() {
   const widths = [21, 12, 5.43,  ...Array(15).fill(5.71),  4.86, 4.86, 4.86,  13.29];
   widths.forEach((w, i) => { ws.getColumn(i + 1).width = w; });
 
-  // ── RIADOK 1–2 – logo, číslo zákazky, nadpis, tesnosť, stavba ──
+  // ── RIADOK 1–2 – podľa vzoru z výroby: popisy v riadku 1, hodnoty v riadku 2 ──
+  //   A logo | B:C Číslo zákazky | D:G Stavba | H:P ROZPIS POTRUBIA (pod ním prázdne pole) | Q:R Tesnosť | S:V Číslo rozpisky
   ws.mergeCells('A1:A2');   // logo
-  ws.mergeCells('B1:E1');
-  ws.mergeCells('B2:E2');
-  ws.mergeCells('F1:O2');   // nadpis cez oba riadky
-  ws.mergeCells('P1:R1');   // tesnosť – rovnaké bunky ako v pôvodnom formulári F05-8.2
-  ws.mergeCells('P2:R2');
-  ws.mergeCells('S1:V1');
-  ws.mergeCells('S2:V2');
+  [['B1:C1', 'B2:C2'], ['D1:G1', 'D2:G2'], ['H1:P1', 'H2:P2'], ['Q1:R1', 'Q2:R2'], ['S1:V1', 'S2:V2']]
+    .forEach(([r1, r2]) => { ws.mergeCells(r1); ws.mergeCells(r2); });
   setCell('A1', '');
   setCell('B1', 'Číslo zákazky:');
-  setCell('F1', 'ROZPIS POTRUBIA', { size: 16, bold: true });
-  setCell('P1', 'Tesnosť:');
-  setCell('S1', 'Stavba:');
-  // hodnoty hlavičky – dlhšia hodnota sa zalomí na 2 riadky (napr. tesnosť E600120(ho)S1500single)
-  setCell('B2', zakazka, { size: 14, bold: true });
-  setCell('P2', tesnost, { size: 14, bold: true });
-  // stavba (S2:V2 ≈ 20 znakov na riadok pri 14 b): do 2 riadkov 14 b, dlhšia 12 b a pri viac ako 2 riadkoch vyšší riadok 2
-  const stavbaVelka = pocetRiadkov(stavba, 20) <= 2;
-  const vyskaRiadku2 = stavbaVelka ? 36 : Math.max(36, pocetRiadkov(stavba, 25) * 15.75 + 6);
-  setCell('S2', stavba, { size: stavbaVelka ? 14 : 12, bold: true });
+  setCell('D1', 'Stavba:');
+  setCell('H1', 'ROZPIS POTRUBIA', { size: 16, bold: true });
+  setCell('Q1', 'Tesnosť:');
+  setCell('S1', 'Číslo rozpisky:');
+  setCell('H2', '');        // prázdne pole pod nadpisom
+  setCell('S2', '');        // číslo rozpisky sa už nezadáva – pole ostáva prázdne
+  // Hodnota: 14 b, ak sa zmestí do 2 riadkov; inak 12 b (min. veľkosť) a riadok 2 sa zvýši, aby sa zmestila celá.
+  // znakov14 / znakov12 = približne koľko znakov sa zmestí na riadok bunky pri 14 b / 12 b
+  function hodnotaHlavicky(addr, text, znakov14, znakov12) {
+    const velka = pocetRiadkov(text, znakov14) <= 2;
+    setCell(addr, text, { size: velka ? 14 : 12, bold: true });
+    return velka ? 36 : Math.max(36, pocetRiadkov(text, znakov12) * 15.75 + 6);
+  }
+  const vyskaRiadku2 = Math.max(
+    hodnotaHlavicky('B2', zakazka, 12, 14),    // B:C ≈ 122 px
+    hodnotaHlavicky('D2', stavba, 15, 18),     // D:G ≈ 160 px
+    hodnotaHlavicky('Q2', tesnost, 8, 9),      // Q:R ≈ 80 px (E600120(ho)S1500single → 3 riadky pri 12 b)
+  );
 
   // Logo APIAGRA v ľavom hornom rohu (A1:A2), vycentrované
   try {
@@ -5596,7 +5600,7 @@ async function exportExcel() {
 
   // ── VÝŠKY RIADKOV ────────────────────────────────────
   ws.getRow(1).height = 22;
-  ws.getRow(2).height = vyskaRiadku2;   // 36, pri dlhom názve stavby vyšší (celý sa zmestí)
+  ws.getRow(2).height = vyskaRiadku2;   // 36, pri dlhej hodnote (stavba, tesnosť) vyšší – zmestí sa celá
   ws.getRow(3).height = 17;
   ws.getRow(4).height = 17;
   ws.getRow(5).height = 18;
