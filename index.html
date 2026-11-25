@@ -5283,14 +5283,34 @@ function camductRozmerText(kod, r) {
   return [r.A, r.B].filter(v => v !== '' && v != null).map(v => +v).join('x');
 }
 
-// Hrúbka plechu – ODHAD (vzorka: spiro do ⌀200 = 0,5; kruhové tvarovky do ⌀200 = 0,6)
+// ── HRÚBKA PLECHU (GAUGE) – podľa tabuľky výroby APIAGRA (mail 25. 11. 2026) ─────────────────
+// Pásma [do rozmeru vrátane, hrúbka mm]. Rozhoduje najväčší rozmer prierezu prvku (hranatý: väčšia strana,
+// kruhový: priemer; zasúvané tvarovky – menovitý priemer, nie −3 mm). Nad poslednou hranicou platí posledná hrúbka.
+const CAMDUCT_HRUBKY = {
+  hranateRovne:    [[400, 0.5], [710, 0.7], [1000, 0.8], [1300, 0.9], [Infinity, 1]],   // 0–400 / 401–710 / 711–1000 / 1001–1300 / 1301–5000
+  hranateTvarovky: [[710, 0.7], [Infinity, 0.9]],                                       // 0–710 / 711–5000
+  spiroPotrubie:   [[315, 0.5], [500, 0.6], [700, 0.8], [Infinity, 0.9]],               // 80–315 / 316–500 / 501–700 / 701–1250
+  spiroTvarovky:   [[700, 0.7], [Infinity, 0.9]],                                       // 80–700 / 701–1250
+};
+const CAMDUCT_HRANATE_ROVNE = ['RUH', 'RUHD', 'RUHT'];
+const CAMDUCT_SPIRO_POTRUBIE = ['RUS', 'RUK'];
+
+// Ktorá tabuľka platí pre prvok: rovné rúry podľa zoznamu, tvarovky s hranatým rozmerom (aj prechod/nástavec
+// hranatý na kruh, príruby, lišty) ako hranaté tvarovky, ostatné (len kruhové priemery) ako spiro tvarovky
+function camductHrubkaTabulka(kod) {
+  if (CAMDUCT_HRANATE_ROVNE.includes(kod)) return 'hranateRovne';
+  if (CAMDUCT_SPIRO_POTRUBIE.includes(kod)) return 'spiroPotrubie';
+  const typy = Object.values(DIM_TYPES[kod] || {});
+  return typy.includes('h') || !typy.length ? 'hranateTvarovky' : 'spiroTvarovky';
+}
+
 function camductHrubka(kod, r, s) {
   if (s.druh === 'nakup') return 0;
-  const typy = DIM_TYPES[kod] || {};
-  const rozmery = Object.keys(typy).map(c => +r[c] || 0);
+  const m = riadokMenovity(r);
+  const rozmery = Object.keys(DIM_TYPES[kod] || {}).map(c => +m[c] || 0);
   const max = rozmery.length ? Math.max(...rozmery) : 0;
-  if (s.druh === 'paska') return max <= 250 ? 0.5 : max <= 500 ? 0.6 : max <= 800 ? 0.8 : max <= 1250 ? 1 : 1.25;
-  return max <= 500 ? 0.6 : max <= 1000 ? 0.8 : max <= 2000 ? 1 : 1.25;
+  const pasmo = CAMDUCT_HRUBKY[camductHrubkaTabulka(kod)].find(([hranica]) => max <= hranica);
+  return pasmo[1];
 }
 
 // Rozmery položky: A, B, C… z formulára (zasúvané tvarovky o 3 mm menšie), pevné podľa šablóny
