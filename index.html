@@ -5178,7 +5178,8 @@ const CAMDUCT_AUTO = 1000000;                 // rozmer dopočíta CAMduct („A
 const CAMDUCT_BEZ_TXT = ['VOLNA'];            // do TXT nejde (vyrába sa podľa prílohy)
 // Hlavička TXT: výroba si zákazku v CAMducte zakladá a vypĺňa sama a rozpisky do nej len dopĺňa (jedna zákazka =
 // viac rozpisiek). Názov, referencia, dátum, Field 1/2 a priečinok z hlavičky by pri importe prepísali Job Information
-// otvorenej zákazky a bez hlavičky CAMduct súbor nenačíta → skrátená hlavička: len firma, prázdny priečinok,
+// otvorenej zákazky a bez hlavičky CAMduct súbor nenačíta → skrátená hlavička: firma, priečinok (PROJECTAREA = rok
+// a mesiac exportu, napr. 2026 / NOVEMBER – bez neho CAMduct ukladal zákazku do predvoleného priečinka projektov),
 // ARCHIVE OFF (overené vo výrobe 26. 11. 2026). true = plná hlavička ako vzorka 78-07-26.
 const CAMDUCT_PLNA_HLAVICKA = false;
 const CAMDUCT_MESIACE = ['JANUARY', 'FEBRUARY', 'MARCH', 'APRIL', 'MAY', 'JUNE', 'JULY',
@@ -5383,7 +5384,7 @@ function camductTxt(riadky, hlavicka) {
   }
   k('COMPANYADDRESS_START'); CAMDUCT_FIRMA.forEach(v); k('COMPANYADDRESS_END');
   k('PROJECTAREA_START');
-  if (plna) { v(String(d.getFullYear())); v(CAMDUCT_MESIACE[d.getMonth()]); }   // prázdny = priečinok zákazky sa nemení
+  v(String(d.getFullYear())); v(CAMDUCT_MESIACE[d.getMonth()]);   // priečinok zákazky: rok a mesiac exportu (napr. 2026 / NOVEMBER)
   k('PROJECTAREA_END');
   k('ARCHIVE'); v('OFF');
   if (plna) {
