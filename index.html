@@ -5176,6 +5176,11 @@ const CAMDUCT_FIRMA = ['APIAGRA s.r.o.', 'Slanická 36'];
 const CAMDUCT_SPEC = '1000 Pa';
 const CAMDUCT_AUTO = 1000000;                 // rozmer dopočíta CAMduct („Auto“)
 const CAMDUCT_BEZ_TXT = ['VOLNA'];            // do TXT nejde (vyrába sa podľa prílohy)
+// Hlavička TXT: výroba si zákazku v CAMducte zakladá a vypĺňa sama a rozpisky do nej len dopĺňa (jedna zákazka =
+// viac rozpisiek). Názov, referencia, dátum, Field 1/2 a priečinok z hlavičky by pri importe prepísali Job Information
+// otvorenej zákazky a bez hlavičky CAMduct súbor nenačíta → skrátená hlavička: len firma, prázdny priečinok,
+// ARCHIVE OFF (overené vo výrobe 26. 11. 2026). true = plná hlavička ako vzorka 78-07-26.
+const CAMDUCT_PLNA_HLAVICKA = false;
 const CAMDUCT_MESIACE = ['JANUARY', 'FEBRUARY', 'MARCH', 'APRIL', 'MAY', 'JUNE', 'JULY',
                          'AUGUST', 'SEPTEMBER', 'OCTOBER', 'NOVEMBER', 'DECEMBER'];
 
@@ -5369,15 +5374,22 @@ function camductTxt(riadky, hlavicka) {
   const cesta = CAMDUCT_CESTY[kniznica] || CAMDUCT_CESTY[CAMDUCT_KNIZNICA];
   const nova = kniznica !== 'Apiagra';
 
+  const plna = hlavicka.plna != null ? hlavicka.plna : CAMDUCT_PLNA_HLAVICKA;
   k('JOBHEADER_START');
-  k('JOB_NAME'); v(camductText(hlavicka.cislo) || camductText(hlavicka.zaklad));   // číslo rozpisky sa už nezadáva → názov súboru (cislo len pre test so vzorkou)
-  k('JOB_REFERENCE'); v(zariadenie);
-  k('JOB_DATE'); v(`${d.getDate()}. ${d.getMonth() + 1}. ${d.getFullYear()}`);
+  if (plna) {
+    k('JOB_NAME'); v(camductText(hlavicka.cislo) || camductText(hlavicka.zaklad));   // číslo rozpisky sa už nezadáva → názov súboru (cislo len pre test so vzorkou)
+    k('JOB_REFERENCE'); v(zariadenie);
+    k('JOB_DATE'); v(`${d.getDate()}. ${d.getMonth() + 1}. ${d.getFullYear()}`);
+  }
   k('COMPANYADDRESS_START'); CAMDUCT_FIRMA.forEach(v); k('COMPANYADDRESS_END');
-  k('PROJECTAREA_START'); v(String(d.getFullYear())); v(CAMDUCT_MESIACE[d.getMonth()]); k('PROJECTAREA_END');
+  k('PROJECTAREA_START');
+  if (plna) { v(String(d.getFullYear())); v(CAMDUCT_MESIACE[d.getMonth()]); }   // prázdny = priečinok zákazky sa nemení
+  k('PROJECTAREA_END');
   k('ARCHIVE'); v('OFF');
-  k('FIELD1'); v(pole1.trim());
-  k('FIELD2'); v(pole2.trim());
+  if (plna) {
+    k('FIELD1'); v(pole1.trim());
+    k('FIELD2'); v(pole2.trim());
+  }
   k('JOBHEADER_END');
 
   let paleta = 0;
