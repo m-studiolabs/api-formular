@@ -1099,8 +1099,8 @@ const TVAROVKY = {
       B: { req: true,  type: 'dim', label: 'Výška (mm)' },
       C: { req: true,  type: 'dim', label: 'Priemer (mm)' },
       D: { req: true,  type: 'len', label: 'Dĺžka (mm)' },
-      E: { req: false, type: 'dim', label: 'Offset 1 (mm)' },
-      F: { req: false, type: 'dim', label: 'Offset 2 (mm)' },
+      E: { req: false, type: 'signed', label: 'Offset 1 (mm)' },   // môže byť aj záporný
+      F: { req: false, type: 'signed', label: 'Offset 2 (mm)' },   // môže byť aj záporný
     },
     autoFill: {
       G: () => 30,
